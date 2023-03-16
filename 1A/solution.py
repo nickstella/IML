@@ -6,6 +6,7 @@ import numpy as np
 from sklearn.model_selection import KFold
 from sklearn.linear_model import Ridge
 
+
 def fit(X, y, lam):
     """
     This function receives training data points, then fits the ridge regression on this data
@@ -24,8 +25,8 @@ def fit(X, y, lam):
     """
     w = np.zeros((13,))
     # TODO: Enter your code here
-    reg = Ridge(alpha = lam)
-    reg.fit(X = X, y = y)
+    reg = Ridge(alpha=lam)
+    reg.fit(X=X, y=y)
     w = np.asarray(reg.coef_)
     assert w.shape == (13,)
     return w
