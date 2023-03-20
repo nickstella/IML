@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
-
 def transform_data(X):
     """
     This function transforms the 5 input features of matrix X (x_i denoting the i-th component of X) 
@@ -26,33 +25,35 @@ def transform_data(X):
     """
     X_transformed = np.zeros((700, 21))
 
+    X_transformed[:, :5] = X
+
     X_2 = np.array(X)
 
-    for i in range(X_new.shape[0]):
-        for j in range(X_new.shape[1]):
-            X_new[i][j] = X_new[i][j]**2
+    for i in range(X_2.shape[0]):
+        for j in range(X_2.shape[1]):
+            X_2[i][j] = X_2[i][j]**2
 
-    X_transformed[:][5:10] = X_2
+    X_transformed[:,5:10] = X_2
 
     X_3 = np.array(X)
 
-    for i in range(X_new.shape[0]):
-        for j in range(X_new.shape[1]):
-            X_new[i][j] = np.exp(X_new[i][j])
+    for i in range(X_3.shape[0]):
+        for j in range(X_3.shape[1]):
+            X_3[i][j] = np.exp(X_3[i][j])
 
-    X_transformed[:][10:15] = X_3
+    X_transformed[:,10:15] = X_3
 
     X_4 = np.array(X)
 
-    for i in range(X_new.shape[0]):
-        for j in range(X_new.shape[1]):
-            X_new[i][j] = np.cos(X_new[i][j])
+    for i in range(X_4.shape[0]):
+        for j in range(X_4.shape[1]):
+            X_4[i][j] = np.cos(X_4[i][j])
 
-    X_transformed[:][15:20] = X_4
+    X_transformed[:,15:20] = X_4
 
     X_5 = np.ones(X.shape[0])
 
-    X_transformed[:][20] = X_5
+    X_transformed[:,20] = X_5
 
     assert X_transformed.shape == (700, 21)
     return X_transformed
@@ -75,14 +76,19 @@ def fit(X, y):
     w = np.zeros((21,))
     X_transformed = transform_data(X)
 
-    print(X_transformed)
+    #np.savetxt("./resultssss.csv", X_transformed, fmt="%.12f")
 
-    #linear_regression = LinearRegression()
+    # Basic linear regression with sklearn
+    #linear_regression = LinearRegression(fit_intercept=False)
     #linear_regression.fit(X_transformed, y)
 
-    #w = linear_regression.coef_
 
-    #assert w.shape == (21,)
+    # Explicit solve, with np matrix inversion
+    #w = np.matmul(np.matmul(np.linalg.inv(np.matmul(X_transformed.transpose(), X_transformed)), X_transformed.transpose()), y)
+
+    w = np.linalg.solve(np.matmul(X_transformed.transpose(), X_transformed), np.matmul(X_transformed.transpose(), y))
+
+    assert w.shape == (21,)
     return w
 
 
