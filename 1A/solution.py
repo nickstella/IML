@@ -3,11 +3,8 @@
 # First, we import necessary libraries:
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import KFold
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_squared_error
-
-kf = KFold(n_splits = 10)
 
 def fit(X, y, lam):
     """
@@ -50,8 +47,6 @@ def calculate_RMSE(w, X, y):
     RMSE: float: dim = 1, RMSE value
     """
 
-    RMSE = 0
-
     pred = np.matmul(X, w)
     RMSE = mean_squared_error(y, pred) ** .5
 
@@ -76,9 +71,6 @@ def average_LR_RMSE(X, y, lambdas, n_folds):
     avg_RMSE: array of floats: dim = (5,), average RMSE value for every lambda
     """
     RMSE_mat = np.zeros((n_folds, len(lambdas)))
-
-    # TODO: Enter your code here. Hint: Use functions 'fit' and 'calculate_RMSE' with training and test data
-    # and fill all entries in the matrix 'RMSE_mat'
 
     test_set_dim = X.shape[0] // n_folds
 
