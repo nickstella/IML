@@ -27,7 +27,7 @@ def fit(X, y, lam):
     """
     w = np.zeros((13,))
     # TODO: Enter your code here
-    reg = Ridge(alpha=lam)
+    reg = Ridge(alpha=lam, fit_intercept=False)
     reg.fit(X=X, y=y)
     w = np.asarray(reg.coef_)
     assert w.shape == (13,)
@@ -77,6 +77,36 @@ def average_LR_RMSE(X, y, lambdas, n_folds):
 
     # TODO: Enter your code here. Hint: Use functions 'fit' and 'calculate_RMSE' with training and test data
     # and fill all entries in the matrix 'RMSE_mat'
+
+    test_set_dim = X.shape[0] // n_folds
+
+    for i in range(len(lambdas)):
+        for j in range(0,X.shape[0],test_set_dim):
+            X_new = X.copy()
+            y_new = y.copy()
+            X_test_set = np.delete(X_new, slice(j, j + test_set_dim), 0)
+            y_test_set = np.delete(y_new, slice(j, j + test_set_dim), 0)
+
+            w = fit(X_new, y_new, lambdas[i])
+
+            rmse = calculate_RMSE(w, X_test_set, y_test_set)
+            RMSE_mat[j][i] = rmse
+
+    return np.mean(RMSE_mat, axis=1)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     avg_RMSE = np.mean(RMSE_mat, axis=0)
     for i in range(avg_RMSE.shape[0]):
