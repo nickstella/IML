@@ -25,8 +25,9 @@ def fit(X, y, lam):
     ----------
     w: array of floats: dim = (13,), optimal parameters of ridge regression
     """
+
     w = np.zeros((13,))
-    # TODO: Enter your code here
+
     reg = Ridge(alpha=lam, fit_intercept=False)
     reg.fit(X=X, y=y)
     w = np.asarray(reg.coef_)
@@ -48,8 +49,9 @@ def calculate_RMSE(w, X, y):
     ----------
     RMSE: float: dim = 1, RMSE value
     """
+
     RMSE = 0
-    # TODO: Enter your code here
+
     pred = np.matmul(X, w)
     RMSE = mean_squared_error(y, pred) ** .5
 
@@ -82,38 +84,17 @@ def average_LR_RMSE(X, y, lambdas, n_folds):
 
     for i in range(len(lambdas)):
         for j in range(0,X.shape[0],test_set_dim):
-            X_new = X.copy()
-            y_new = y.copy()
-            X_test_set = np.delete(X_new, slice(j, j + test_set_dim), 0)
-            y_test_set = np.delete(y_new, slice(j, j + test_set_dim), 0)
+            X_test_set = X[j:j+test_set_dim]
+            y_test_set = y[j:j+test_set_dim]
+            X_new = np.delete(X, slice(j, j + test_set_dim), 0)
+            y_new = np.delete(y, slice(j, j + test_set_dim), axis=0)
 
             w = fit(X_new, y_new, lambdas[i])
 
             rmse = calculate_RMSE(w, X_test_set, y_test_set)
-            RMSE_mat[j][i] = rmse
+            RMSE_mat[j//test_set_dim][i] = rmse
 
-    return np.mean(RMSE_mat, axis=1)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    avg_RMSE = np.mean(RMSE_mat, axis=0)
-    for i in range(avg_RMSE.shape[0]):
-        for j in range(avg_RMSE.shape[1]):
-            test_data = np.delete(X, ,0)
-    assert avg_RMSE.shape == (5,)
-    return avg_RMSE
+    return np.mean(RMSE_mat, axis=0)
 
 
 # Main function. You don't have to change this
