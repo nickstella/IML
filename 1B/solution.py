@@ -7,7 +7,7 @@ import pandas as pd
 # from sklearn.linear_model import Lasso
 # from sklearn.linear_model import LassoCV
 # from sklearn.linear_model import Ridge
-#from sklearn.linear_model import ElasticNetCV
+from sklearn.linear_model import ElasticNetCV
 from sklearn.linear_model import RidgeCV
 # from sklearn.metrics import mean_squared_error #for score calculation
 
@@ -93,11 +93,14 @@ def fit(X, y):
     #w = np.matmul(np.matmul(np.linalg.inv(np.matmul(X_transformed.transpose(), X_transformed)), X_transformed.transpose()), y)
     #w = np.linalg.solve(np.matmul(X_transformed.transpose(), X_transformed), np.matmul(X_transformed.transpose(), y))
 
-    # Ridge regression, i.e.: Loss function = sum of squares + lambda * L2 norm of weights vector:
-    lambdas = np.linspace(0.1, 100, num = 1000) #setting possible values of lambdas over which we cross-validate
-    ridge = RidgeCV(fit_intercept = False, cv = 10, alphas = lambdas)
+    # Ridge regression for lambda tuning:
+    lambdas = np.linspace(0.1, 200, num = 10000) #setting possible values of lambdas over which we cross-validate
+    ridge = RidgeCV(fit_intercept = False, cv = 11, alphas = lambdas)
     ridge.fit(X_transformed, y)
-    w = ridge.coef_
+    # Explicit solve of ridge regression:
+    w = np.matmul(np.matmul(np.linalg.inv(np.matrix.sum(np.matmul(X_transformed.transpose(), X_transformed), ridge.alpha_*np.identity(21)), X_transformed.transpose()), y))
+
+
 
     # Lasso regression, i.e.: Loss function = sum of squares + lambda * L1 norm of weights vector:
     # lambdas = np.linspace(0.1, 100, num=1000)  # setting possible values of lambdas over which we cross-validate
@@ -106,10 +109,10 @@ def fit(X, y):
     # w = lasso.coef_
 
     # Elastic net regression, i.e.: weighted mix of Lasso and Ridge regression
-    #lambdas = np.linspace(0.01, 1000, num = 10000)
-    #elastic = ElasticNetCV(fit_intercept = False, cv = 15, alphas = lambdas)
-    #elastic.fit(X_transformed, y)
-    #w = elastic.coef_
+    # lambdas = np.linspace(0.01, 1000, num = 10000)
+    # elastic = ElasticNetCV(fit_intercept = False, cv = 12, alphas = lambdas)
+    # elastic.fit(X_transformed, y)
+    # w = elastic.coef_
 
     # Compute RSME: this part is probably false, because result does not coincide with submission server's assessment score.
     # y_pred = lasso.predict(X_transformed)
