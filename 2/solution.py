@@ -1,6 +1,5 @@
 """
 EDA
-
 train = pd.read_csv("...\\train.csv")
 
 train.head(10): we see that the empty cells are in NaN form
@@ -33,6 +32,9 @@ price_SVK    281
 # First, we import necessary libraries:
 import numpy as np
 import pandas as pd
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
+from sklearn.metrics import r2_score
 
 
 def data_loading():
@@ -69,6 +71,17 @@ def data_loading():
     X_test = np.zeros_like(test_df)
 
     # TODO: Perform data preprocessing, imputation and extract X_train, y_train and X_test
+    test_df = pd.get_dummies(test_df, drop_first=True)
+    train_df = pd.get_dummies(train_df, drop_first=True)
+    imp = IterativeImputer(max_iter=10, random_state=0)
+    train_df = train_df.to_numpy()
+    test_df = test_df.to_numpy()
+    train_df = imp.fit_transform(train_df)
+    X_test = imp.fit_transform(test_df)
+    y_train = train_df[:, 2]
+    X_train = np.delete(train_df, 2, axis=1)
+    print(train_df)
+    print(test_df)
 
     assert (X_train.shape[1] == X_test.shape[1]) and (X_train.shape[0] == y_train.shape[0]) and (
                 X_test.shape[0] == 100), "Invalid data shape"
@@ -101,6 +114,7 @@ def modeling_and_prediction(X_train, y_train, X_test):
 if __name__ == "__main__":
     # Data loading
     X_train, y_train, X_test = data_loading()
+    exit()
     # The function retrieving optimal LR parameters
     y_pred = modeling_and_prediction(X_train, y_train, X_test)
     # Save results in the required format
