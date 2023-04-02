@@ -27,9 +27,6 @@ price_SVK    281
 
 """
 
-# This serves as a template which will guide you through the implementation of this task.  It is advised
-# to first read the whole template and get a sense of the overall structure of the code before trying to fill in any of the TODO gaps
-# First, we import necessary libraries:
 import numpy as np
 import pandas as pd
 from sklearn.experimental import enable_iterative_imputer
@@ -53,17 +50,17 @@ def data_loading():
     # Load training data
     train_df = pd.read_csv("train.csv")
 
-    print("Training data:")
-    print("Shape:", train_df.shape)
-    print(train_df.head(2))
-    print('\n')
+    #print("Training data:")
+    #print("Shape:", train_df.shape)
+    #print(train_df.head(2))
+    #print('\n')
 
     # Load test data
     test_df = pd.read_csv("test.csv")
 
-    print("Test data:")
-    print(test_df.shape)
-    print(test_df.head(2))
+    #print("Test data:")
+    #print(test_df.shape)
+    #print(test_df.head(2))
 
     # Dummy initialization of the X_train, X_test and y_train
     X_train = np.zeros_like(train_df.drop(['price_CHF'], axis=1))
@@ -71,17 +68,24 @@ def data_loading():
     X_test = np.zeros_like(test_df)
 
     # TODO: Perform data preprocessing, imputation and extract X_train, y_train and X_test
-    test_df = pd.get_dummies(test_df, drop_first=True)
-    train_df = pd.get_dummies(train_df, drop_first=True)
+    test_df = pd.get_dummies(test_df)
+    train_df = pd.get_dummies(train_df)
+
     imp = IterativeImputer(max_iter=10, random_state=0)
+
     train_df = train_df.to_numpy()
     test_df = test_df.to_numpy()
+
+    print(test_df)
+
     train_df = imp.fit_transform(train_df)
-    X_test = imp.fit_transform(test_df)
     y_train = train_df[:, 2]
     X_train = np.delete(train_df, 2, axis=1)
-    print(train_df)
-    print(test_df)
+
+    X_test = imp.fit_transform(test_df)
+
+    print(X_train)
+    #print(test_df)
 
     assert (X_train.shape[1] == X_test.shape[1]) and (X_train.shape[0] == y_train.shape[0]) and (
                 X_test.shape[0] == 100), "Invalid data shape"
