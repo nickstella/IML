@@ -98,7 +98,10 @@ def fit(X, y):
     ridge = RidgeCV(fit_intercept = False, cv = 11, alphas = lambdas)
     ridge.fit(X_transformed, y)
     # Explicit solve of ridge regression:
-    w = np.matmul(np.matmul(np.linalg.inv(np.matrix.sum(np.matmul(X_transformed.transpose(), X_transformed), ridge.alpha_*np.identity(21)), X_transformed.transpose()), y))
+    I = ridge.alpha_ * np.identity(21)
+    to_inv = np.add(np.matmul(X_transformed.transpose(), X_transformed), I)
+    inv = np.linalg.inv(to_inv)
+    w = np.matmul(np.matmul(inv, X_transformed.transpose()), y)
 
 
 
