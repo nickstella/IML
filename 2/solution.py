@@ -83,7 +83,7 @@ def data_loading():
     # Initialize class
     #imp = IterativeImputer(missing_values=np.nan)
     #imp = SimpleImputer(missing_values=np.nan, strategy='mean')
-    imp = KNNImputer(n_neighbors=15)
+    imp = KNNImputer(n_neighbors=35)
                                                                                                    
     # Convert to numpy
     #train_df = train_df.dropna(subset="price_CHF")
@@ -122,8 +122,8 @@ def modeling_and_prediction(X_train, y_train, X_test):
     y_pred = np.zeros(X_test.shape[0])
     # TODO: Define the model and fit it using training data. Then, use test data to make predictions
 
-    kernel = kernels.RBF() + kernels.WhiteKernel()
-    gpr = GaussianProcessRegressor(kernel=kernel, alpha=.001, normalize_y=False)
+    kernel = kernels.Sum(kernels.DotProduct(), kernels.RBF())
+    gpr = GaussianProcessRegressor(kernel=kernel, normalize_y=True)
     gpr.fit(X_train, y_train)
     print(gpr.score(X_train, y_train))
     y_pred, sigma = gpr.predict(X_test, return_std=True)
