@@ -29,10 +29,11 @@ price_SVK    281
 
 import numpy as np
 import pandas as pd
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer
+from sklearn.experimental import enable_iterative_imputer #NoQA
+from sklearn.impute import IterativeImputer, SimpleImputer, KNNImputer
+from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.metrics import r2_score
-
+from sklearn import preprocessing
 
 def data_loading():
     """
@@ -63,22 +64,38 @@ def data_loading():
     print(test_df.head(2))
     print('\n')
 
-    # Dummy initialization of the X_train, X_test and y_train
+    # Dummy (numpy) initialization of the X_train, X_test and y_train
     X_train = np.zeros_like(train_df.drop(['price_CHF'], axis=1))
     y_train = np.zeros_like(train_df['price_CHF'])
     X_test = np.zeros_like(test_df)
 
-    test_df = pd.get_dummies(test_df)
+    # Convert categorical variable "season" into 4 indicator (0/1) variables
     train_df = pd.get_dummies(train_df)
+    test_df = pd.get_dummies(test_df)
 
-    imp = IterativeImputer(max_iter=10, random_state=0)
+    # Standardization of dependent variables
+    train_df_y = train_df["price_CHF"]
+    train_df_x = train_df.drop(columns="price_CHF")
 
-    train_df = train_df.to_numpy()
-    test_df = test_df.to_numpy()
+    train_df_x = preprocessing.scale(train_df_x)
+    test_df = preprocessing.scale(test_df)
 
+    # Initialize class
+    #imp = IterativeImputer(missing_values=np.nan)
+    #imp = SimpleImputer(missing_values=np.nan, strategy='mean')
+    imp = KNNImputer(n_neighbors=15)
+                                                                                                   
+    # Convert to numpy
+    #train_df = train_df.dropna(subset="price_CHF")
+    #train_df = train_df.to_numpy()
+    #test_df = test_df.to_numpy()
+
+    # Data imputation
+    train_df_y = train_df_y.to_numpy()
+    train_df = np.column_stack((train_df_x, train_df_y))
     train_df = imp.fit_transform(train_df)
-    y_train = train_df[:, 2]
-    X_train = np.delete(train_df, 2, axis=1)
+    y_train = train_df[:,-1]
+    X_train = np.delete(train_df, -1, axis=1)
 
     X_test = imp.fit_transform(test_df)
 
@@ -105,6 +122,13 @@ def modeling_and_prediction(X_train, y_train, X_test):
     y_pred = np.zeros(X_test.shape[0])
     # TODO: Define the model and fit it using training data. Then, use test data to make predictions
 
+    kernel = kernels.RBF() + kernels.WhiteKernel()
+    gpr = GaussianProcessRegressor(kernel=kernel, alpha=.001, normalize_y=False)
+    gpr.fit(X_train, y_train)
+    print(gpr.score(X_train, y_train))
+    y_pred, sigma = gpr.predict(X_test, return_std=True)
+
+
     assert y_pred.shape == (100,), "Invalid data shape"
     return y_pred
 
@@ -113,7 +137,6 @@ def modeling_and_prediction(X_train, y_train, X_test):
 if __name__ == "__main__":
     # Data loading
     X_train, y_train, X_test = data_loading()
-    exit()
     # The function retrieving optimal LR parameters
     y_pred = modeling_and_prediction(X_train, y_train, X_test)
     # Save results in the required format
