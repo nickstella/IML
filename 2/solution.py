@@ -77,13 +77,15 @@ def data_loading():
     train_df_y = train_df["price_CHF"]
     train_df_x = train_df.drop(columns="price_CHF")
 
-    train_df_x = preprocessing.scale(train_df_x)
-    test_df = preprocessing.scale(test_df)
+
+    scaler = preprocessing.MinMaxScaler()
+    train_df_x = scaler.fit_transform(train_df_x)
+    test_df = scaler.fit_transform(test_df)
 
     # Initialize class
     #imp = IterativeImputer(missing_values=np.nan)
     #imp = SimpleImputer(missing_values=np.nan, strategy='mean')
-    imp = KNNImputer(n_neighbors=35)
+    imp = KNNImputer(n_neighbors=8, weights="uniform")
                                                                                                    
     # Convert to numpy
     #train_df = train_df.dropna(subset="price_CHF")
@@ -97,7 +99,8 @@ def data_loading():
     y_train = train_df[:,-1]
     X_train = np.delete(train_df, -1, axis=1)
 
-    X_test = imp.fit_transform(test_df)
+    imp.fit(train_df_x)
+    X_test = imp.transform(test_df)
 
     assert (X_train.shape[1] == X_test.shape[1]) and (X_train.shape[0] == y_train.shape[0]) and (
                 X_test.shape[0] == 100), "Invalid data shape"
@@ -120,10 +123,10 @@ def modeling_and_prediction(X_train, y_train, X_test):
     """
 
     y_pred = np.zeros(X_test.shape[0])
-    # TODO: Define the model and fit it using training data. Then, use test data to make predictions
 
     kernel = kernels.Sum(kernels.DotProduct(), kernels.RBF())
-    gpr = GaussianProcessRegressor(kernel=kernel, normalize_y=True)
+    #kernel = kernels.DotProduct()
+    gpr = GaussianProcessRegressor(kernel=kernel, normalize_y=False)
     gpr.fit(X_train, y_train)
     print(gpr.score(X_train, y_train))
     y_pred, sigma = gpr.predict(X_test, return_std=True)
