@@ -19,15 +19,23 @@ def generate_embeddings():
     Transform, resize and normalize the images and then use a pretrained model to extract
     the embeddings.
     """
+
     print("Generating embeddings...")
 
     # The following transform preprocesses the images to make them compatible with the chosen model
+    # Note 1: I have seen that most people resize to 256 and crop to 224 instead of resizing to 224
+    #       directly, not sure why though.
+    # Note 2: I found out that ToTensor already transforms the image pixel values to move them from
+    #       the range [0,255] to [0.0,1.0]. Normalization makes more sense now: we are subtracting
+    #       a mean and dividing std in [0.0,1.0]. The values for mean and std are well known and match
+    #       ResNet50, or whatever model we are going to use.
+    # TODO Nickstar: play with these below according to the pretrained model you choose
     train_transforms = transforms.Compose([transforms.Resize((256,256)),
                                            transforms.CenterCrop((224,224)),
                                            transforms.ToTensor(),
                                            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
-    # Images are retrieved and transformed
+    # Images are retrieved and transformed using the transformation defined above
     train_dataset = datasets.ImageFolder(root="dataset/", transform=train_transforms)
 
     # Images are loaded in an iterable DataLoader object
@@ -37,9 +45,11 @@ def generate_embeddings():
                               pin_memory=True, num_workers=8)
 
     # Definition of a model for extraction of the embeddings
+    # TODO Nickstar: play with different models
     model = resnet50(weights=ResNet50_Weights.DEFAULT)
     embeddings = []
-    embedding_size = 2048  # Dummy variable, replace with the actual embedding size once you pick your model
+    # TODO Nickstar: this is the size of each embedding. It will depend on the model you play with.
+    embedding_size = 2048
     assert embedding_size == model.fc.in_features
 
     # Replacement of the last layer of the ResNet architecture with an identity layer
@@ -48,12 +58,17 @@ def generate_embeddings():
     # Images are fed to the model to retrieve their embeddings
     model.eval()
 
+    # Each 'images' is a tensor of shape [64,3,224,224], that is, 64 images.
     for images, _ in train_loader:
         with torch.no_grad():
             embedding_batch = model(images)
         embeddings.append(embedding_batch.numpy())
 
     embeddings = np.concatenate(embeddings, axis=0)
+
+    print(f"Embeddings correctly generated. A numpy array of shape {embeddings.shape} will now be saved to disk.")
+    print(embeddings)
+
     np.save('dataset/embeddings.npy', embeddings)
 
 
