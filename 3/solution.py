@@ -2,7 +2,7 @@
 # First, we import necessary libraries:
 import numpy as np
 from torchvision import transforms
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset, SubsetRandomSampler
 import os
 import torch
 from torchvision import transforms
@@ -84,6 +84,9 @@ def get_data(file, train=True):
     output: X: numpy array, the features
             y: numpy array, the labels
     """
+
+    print(f"Loading data...")
+
     triplets = []
     i=0
     with open(file) as f:
@@ -98,14 +101,15 @@ def get_data(file, train=True):
     embeddings = np.load('dataset/embeddings.npy')
 
     # Normalization of embeddings. Each embedding will now be a 2048-dimensional vector with norm 1.
-    print("Prior to normalization:")
-    print(embeddings)
+
+    #print("Prior to normalization:")
+    #print(embeddings)
 
     norms = np.linalg.norm(embeddings, axis=1)
     embeddings = embeddings / norms[:, np.newaxis]
 
-    print("After normalization:")
-    print(embeddings)
+    #print("After normalization:")
+    #print(embeddings)
 
     file_to_embedding = {}
     for i in range(len(filenames)):
@@ -127,6 +131,13 @@ def get_data(file, train=True):
     X = np.vstack(X)
     y = np.hstack(y)
 
+    if train:
+        assert X.shape == (119030, 6144) and y.shape == (119030, )
+    else:
+        pass
+
+    print("Data correctly loaded.")
+
     return X, y
 
 
@@ -140,6 +151,9 @@ def create_loader_from_np(X, y=None, train=True, batch_size=64, shuffle=True, nu
 
     output: loader: torch.data.util.DataLoader, the object containing the data
     """
+
+    print("Creating the data loader...")
+
     if train:
         dataset = TensorDataset(torch.from_numpy(X).type(torch.float),
                                 torch.from_numpy(y).type(torch.long))
@@ -149,6 +163,8 @@ def create_loader_from_np(X, y=None, train=True, batch_size=64, shuffle=True, nu
                         batch_size=batch_size,
                         shuffle=shuffle,
                         pin_memory=True, num_workers=num_workers)
+
+    print("Data loader created.")
     return loader
 
 
@@ -186,12 +202,14 @@ class Net(nn.Module):
         outB = self.forward_one_embedding(B)
         outC = self.forward_one_embedding(B)
 
-        distAB = torch.pairwise_distance(outA, outB, p=2)
-        distAC = torch.pairwise_distance(outA, outC, p=2)
+        distance = nn.PairwiseDistance(p=2, keepdim=True)
+        distAB = distance(outA, outB)
+        distAC = distance(outA, outC)
 
-        distances = torch.cat([distAB,distAC])
+        distances = torch.cat((distAB,distAC),dim=1)
 
-        out = torch.sigmoid(self.out(distances))
+        out = self.out(distances)
+        out = torch.sigmoid(out)
 
         return out
 
@@ -204,6 +222,9 @@ def train_model(train_loader):
 
     output: model: torch.nn.Module, the trained model
     """
+
+    print("Starting model training...")
+
     model = Net()
     model.train()
     model.to(device)
@@ -214,12 +235,65 @@ def train_model(train_loader):
     # on the validation data before submitting the results on the server. After choosing the
     # best model, train it on the whole training data.
 
+    validation_rate = 0.2
+    triplet_num = len(train_loader.dataset)
+    num_validation_data = int(np.floor(validation_rate * triplet_num))
+
+    shuffled_data = np.random.permutation(list(range(triplet_num)))
+
+    train_sampler = SubsetRandomSampler(shuffled_data[num_validation_data:])
+    validation_sampler = SubsetRandomSampler(shuffled_data[:num_validation_data])
+
+    real_train_loader = DataLoader(train_loader.dataset, batch_size=train_loader.batch_size, sampler=train_sampler)
+    validation_loader = DataLoader(train_loader.dataset, batch_size=train_loader.batch_size, sampler=validation_sampler)
+
     criterion = nn.BCELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
-    for epoch in range(n_epochs):
-        for [X, y] in train_loader:
-            pass
+    losses = []
+
+    for epoch in tqdm(range(n_epochs), desc="Epoch"):
+
+        model.train()
+
+        for batch, [X, y] in tqdm(enumerate(real_train_loader),total=len(real_train_loader),leave=False,desc="Batch training"):
+            y_pred = model.forward(X).squeeze()
+            loss = criterion(y_pred, y.to(torch.float32))
+            losses.append(loss)
+            tqdm.write(f'epoch: {epoch:2} batch: {batch:2}   loss: {loss.item():10.8f}')
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        predictions = []
+        model.eval()
+
+        accuracies = []
+
+        with torch.no_grad():
+            for batch, [X, y] in tqdm(enumerate(validation_loader),total=len(validation_loader),leave=False,desc="Batch validation"):
+                X = X.to(device)
+                predicted = model.forward(X)
+                predicted_np = predicted.cpu().numpy()
+                # Rounding the predictions to 0 or 1
+                predicted_np[predicted_np >= 0.5] = 1
+                predicted_np[predicted_np < 0.5] = 0
+                predictions.append(predicted_np)
+
+                y_np = y.cpu().numpy()
+
+                assert len(y_np) == len(predicted_np)
+
+                correct = np.count_nonzero(y_np==predicted_np)
+                accuracy = correct / len(y_np)
+
+                accuracies.append(accuracy)
+
+                tqdm.write(f"epoch: {epoch:2} batch: {batch:2}   prediction accuracy: {accuracy}")
+
+        tqdm.write(f"Epoch {epoch:2} overall accuracy: {sum(accuracies)/len(accuracies)}")
+
     return model
 
 
