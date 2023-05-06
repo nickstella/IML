@@ -213,7 +213,7 @@ class Net(nn.Module):
 
         return out
 
-def train_model(train_loader):
+def train_model(train_loader, validation=False):
     """
     The training procedure of the model; it accepts the training data, defines the model
     and then trains it.
@@ -235,17 +235,18 @@ def train_model(train_loader):
     # on the validation data before submitting the results on the server. After choosing the
     # best model, train it on the whole training data.
 
+
     validation_rate = 0.2
     triplet_num = len(train_loader.dataset)
-    num_validation_data = int(np.floor(validation_rate * triplet_num))
-
+    num_validation_data = int(np.floor(validation_rate * triplet_num)) if validation else 0
     shuffled_data = np.random.permutation(list(range(triplet_num)))
 
     train_sampler = SubsetRandomSampler(shuffled_data[num_validation_data:])
-    validation_sampler = SubsetRandomSampler(shuffled_data[:num_validation_data])
-
     real_train_loader = DataLoader(train_loader.dataset, batch_size=train_loader.batch_size, sampler=train_sampler)
-    validation_loader = DataLoader(train_loader.dataset, batch_size=train_loader.batch_size, sampler=validation_sampler)
+
+    if validation:
+        validation_sampler = SubsetRandomSampler(shuffled_data[:num_validation_data])
+        validation_loader = DataLoader(train_loader.dataset, batch_size=train_loader.batch_size, sampler=validation_sampler)
 
     criterion = nn.BCELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
@@ -254,7 +255,8 @@ def train_model(train_loader):
 
     for epoch in tqdm(range(n_epochs), desc="Epoch"):
 
-        model.train()
+        if validation:
+            model.train()
 
         for batch, [X, y] in tqdm(enumerate(real_train_loader),total=len(real_train_loader),leave=False,desc="Batch training"):
             y_pred = model.forward(X).squeeze()
@@ -266,33 +268,34 @@ def train_model(train_loader):
             loss.backward()
             optimizer.step()
 
-        predictions = []
-        model.eval()
+        if validation:
+            predictions = []
+            model.eval()
 
-        accuracies = []
+            accuracies = []
 
-        with torch.no_grad():
-            for batch, [X, y] in tqdm(enumerate(validation_loader),total=len(validation_loader),leave=False,desc="Batch validation"):
-                X = X.to(device)
-                predicted = model.forward(X)
-                predicted_np = predicted.cpu().numpy()
-                # Rounding the predictions to 0 or 1
-                predicted_np[predicted_np >= 0.5] = 1
-                predicted_np[predicted_np < 0.5] = 0
-                predictions.append(predicted_np)
+            with torch.no_grad():
+                for batch, [X, y] in tqdm(enumerate(validation_loader),total=len(validation_loader),leave=False,desc="Batch validation"):
+                    X = X.to(device)
+                    predicted = model.forward(X)
+                    predicted_np = predicted.cpu().numpy()
+                    # Rounding the predictions to 0 or 1
+                    predicted_np[predicted_np >= 0.5] = 1
+                    predicted_np[predicted_np < 0.5] = 0
+                    predictions.append(predicted_np)
 
-                y_np = y.cpu().numpy()
+                    y_np = y.cpu().numpy()
 
-                assert len(y_np) == len(predicted_np)
+                    assert len(y_np) == len(predicted_np)
 
-                correct = np.count_nonzero(y_np==predicted_np)
-                accuracy = correct / len(y_np)
+                    correct = np.count_nonzero(y_np==predicted_np)
+                    accuracy = correct / len(y_np)
 
-                accuracies.append(accuracy)
+                    accuracies.append(accuracy)
 
-                tqdm.write(f"epoch: {epoch:2} batch: {batch:2}   prediction accuracy: {accuracy}")
+                    tqdm.write(f"epoch: {epoch:2} batch: {batch:2}   prediction accuracy: {accuracy}")
 
-        tqdm.write(f"Epoch {epoch:2} overall accuracy: {sum(accuracies)/len(accuracies)}")
+            tqdm.write(f"Epoch {epoch:2} overall accuracy: {sum(accuracies)/len(accuracies)}")
 
     return model
 
