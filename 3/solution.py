@@ -93,7 +93,16 @@ def get_data(file, train=True):
                                          transform=None)
     filenames = [s[0].split('/')[-1].replace('.jpg', '') for s in train_dataset.samples]
     embeddings = np.load('dataset/embeddings.npy')
-    # TODO: Normalize the embeddings across the dataset
+
+    # Normalization of embeddings. Each embedding will now be a 2048-dimensional vector with norm 1.
+    print("Prior to normalization:")
+    print(embeddings)
+
+    norms = np.linalg.norm(embeddings, axis=1)
+    embeddings = embeddings / norms[:, np.newaxis]
+
+    print("After normalization:")
+    print(embeddings)
 
     file_to_embedding = {}
     for i in range(len(filenames)):
@@ -136,7 +145,6 @@ def create_loader_from_np(X, y=None, train=True, batch_size=64, shuffle=True, nu
     return loader
 
 
-# TODO: define a model. Here, the basic structure is defined, but you need to fill in the details
 class Net(nn.Module):
     """
     The model class, which defines our classifier.
@@ -147,7 +155,9 @@ class Net(nn.Module):
         The constructor of the model.
         """
         super().__init__()
-        self.fc = nn.Linear(3000, 1)
+        self.fc1 = nn.Linear(2048, 512)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, 128)
 
     def forward(self, x):
         """
@@ -157,8 +167,9 @@ class Net(nn.Module):
 
         output: x: torch.Tensor, the output of the model
         """
-        x = self.fc(x)
-        x = F.relu(x)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
         return x
 
 
@@ -218,9 +229,8 @@ if __name__ == '__main__':
     TEST_TRIPLETS = 'test_triplets.txt'
 
     # generate embedding for each image in the dataset
-    if (os.path.exists('dataset/embeddings.npy') == False):
+    if not os.path.exists('dataset/embeddings.npy'):
         generate_embeddings()
-    exit()
 
     # load the training and testing data
     X, y = get_data(TRAIN_TRIPLETS)
