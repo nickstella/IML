@@ -10,6 +10,7 @@ import torchvision.datasets as datasets
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models import resnet50, ResNet50_Weights
+from tqdm import *
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -42,7 +43,7 @@ def generate_embeddings():
     train_loader = DataLoader(dataset=train_dataset,
                               batch_size=64,
                               shuffle=False,
-                              pin_memory=True, num_workers=8)
+                              pin_memory=True, num_workers=3)
 
     # Definition of a model for extraction of the embeddings
     # TODO Nickstar: play with different models
@@ -84,8 +85,10 @@ def get_data(file, train=True):
             y: numpy array, the labels
     """
     triplets = []
+    i=0
     with open(file) as f:
         for line in f:
+            i+=1
             triplets.append(line)
 
     # generate training data from triplets
@@ -118,8 +121,12 @@ def get_data(file, train=True):
         if train:
             X.append(np.hstack([emb[0], emb[2], emb[1]]))
             y.append(0)
+
+    # Shape of X for train set is (119030, 6144) = (59515*2, 2048*3)
+    # Shape of y for train set is (119030, 1)
     X = np.vstack(X)
     y = np.hstack(y)
+
     return X, y
 
 
@@ -158,6 +165,13 @@ class Net(nn.Module):
         self.fc1 = nn.Linear(2048, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 128)
+        self.out = nn.Linear(2,1)
+
+    def forward_one_embedding(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        return x
 
     def forward(self, x):
         """
@@ -167,11 +181,19 @@ class Net(nn.Module):
 
         output: x: torch.Tensor, the output of the model
         """
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        return x
+        A, B, C = torch.chunk(x,3,dim=1)
+        outA = self.forward_one_embedding(A)
+        outB = self.forward_one_embedding(B)
+        outC = self.forward_one_embedding(B)
 
+        distAB = torch.pairwise_distance(outA, outB, p=2)
+        distAC = torch.pairwise_distance(outA, outC, p=2)
+
+        distances = torch.cat([distAB,distAC])
+
+        out = torch.sigmoid(self.out(distances))
+
+        return out
 
 def train_model(train_loader):
     """
@@ -191,6 +213,10 @@ def train_model(train_loader):
     # validation split and print it out. This enables you to see how your model is performing
     # on the validation data before submitting the results on the server. After choosing the
     # best model, train it on the whole training data.
+
+    criterion = nn.TripletMarginLoss(margin=1.0)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+
     for epoch in range(n_epochs):
         for [X, y] in train_loader:
             pass
