@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models import resnet50, ResNet50_Weights
 from tqdm import *
+from matplotlib import pyplot as plt
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -181,7 +182,9 @@ class Net(nn.Module):
         self.fc1 = nn.Linear(2048, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 128)
-        self.out = nn.Linear(2,1)
+        self.fc4 = nn.Linear(2,32)
+        self.fc5 = nn.Linear(32, 16)
+        self.out = nn.Linear(16,1)
 
     def forward_one_embedding(self, x):
         x = F.relu(self.fc1(x))
@@ -208,10 +211,12 @@ class Net(nn.Module):
 
         distances = torch.cat((distAB,distAC),dim=1)
 
-        out = self.out(distances)
-        out = torch.sigmoid(out)
+        output = F.relu(self.fc4(distances))
+        output = F.relu(self.fc5(output))
+        output = self.out(output)
+        output = torch.sigmoid(output)
 
-        return out
+        return output
 
 def train_model(train_loader, validation=False):
     """
@@ -228,7 +233,7 @@ def train_model(train_loader, validation=False):
     model = Net()
     model.train()
     model.to(device)
-    n_epochs = 10
+    n_epochs = 1
     # TODO: define a loss function, optimizer and proceed with training. Hint: use the part
     # of the training data as a validation split. After each epoch, compute the loss on the
     # validation split and print it out. This enables you to see how your model is performing
@@ -252,8 +257,12 @@ def train_model(train_loader, validation=False):
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
     losses = []
+    accuracies = []
+
 
     for epoch in tqdm(range(n_epochs), desc="Epoch"):
+
+        epoch_losses = []
 
         if validation:
             model.train()
@@ -261,24 +270,27 @@ def train_model(train_loader, validation=False):
         for batch, [X, y] in tqdm(enumerate(real_train_loader),total=len(real_train_loader),leave=False,desc="Batch training"):
             y_pred = model.forward(X).squeeze()
             loss = criterion(y_pred, y.to(torch.float32))
-            losses.append(loss)
+            epoch_losses.append(loss.item())
             tqdm.write(f'epoch: {epoch:2} batch: {batch:2}   loss: {loss.item():10.8f}')
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
+        avg_loss = sum(epoch_losses)/len(epoch_losses)
+        losses.append(avg_loss)
+
         if validation:
             predictions = []
             model.eval()
 
-            accuracies = []
+            epoch_accuracies = []
 
             with torch.no_grad():
                 for batch, [X, y] in tqdm(enumerate(validation_loader),total=len(validation_loader),leave=False,desc="Batch validation"):
                     X = X.to(device)
                     predicted = model.forward(X)
-                    predicted_np = predicted.cpu().numpy()
+                    predicted_np = predicted.cpu().numpy().squeeze()
                     # Rounding the predictions to 0 or 1
                     predicted_np[predicted_np >= 0.5] = 1
                     predicted_np[predicted_np < 0.5] = 0
@@ -286,16 +298,42 @@ def train_model(train_loader, validation=False):
 
                     y_np = y.cpu().numpy()
 
+                    #print(y_np)
+                    #print(y_np.shape)
+                    #print(predicted_np)
+                    #print(predicted_np.shape)
+                    #print(y_np==predicted_np)
+                    #print()
+                    #print(np.count_nonzero(y_np==predicted_np))
+
+
                     assert len(y_np) == len(predicted_np)
 
                     correct = np.count_nonzero(y_np==predicted_np)
                     accuracy = correct / len(y_np)
 
-                    accuracies.append(accuracy)
+                    epoch_accuracies.append(accuracy)
 
                     tqdm.write(f"epoch: {epoch:2} batch: {batch:2}   prediction accuracy: {accuracy}")
 
-            tqdm.write(f"Epoch {epoch:2} overall accuracy: {sum(accuracies)/len(accuracies)}")
+            avg_accuracy = sum(epoch_accuracies)/len(epoch_accuracies)
+            accuracies.append(avg_accuracy)
+            tqdm.write(f"Epoch {epoch:2} overall accuracy: {avg_accuracy}")
+
+
+    try:
+        fig, ax = plt.subplots(2)
+        if validation:
+            ax[1].set_title('Accuracy in epochs')
+            ax[1].plot([i for i in range(n_epochs)], [item for item in accuracies])
+            print(accuracies)
+
+        ax[0].set_title('Loss in epochs')
+        ax[0].plot([i for i in range(n_epochs)], [item for item in losses])
+
+        plt.show()
+    except:
+        pass
 
     return model
 
@@ -344,7 +382,7 @@ if __name__ == '__main__':
     test_loader = create_loader_from_np(X_test, train=False, batch_size=2048, shuffle=False)
 
     # define a model and train it
-    model = train_model(train_loader)
+    model = train_model(train_loader, validation=False)
 
     # test the model on the test data
     test_model(model, test_loader)
