@@ -194,8 +194,8 @@ def split_for_validation(X: np.ndarray, y: np.ndarray, rate=0.2):
 
     X_train = np.concatenate([X_train_chunked[:,:2048*3], X_train_chunked[:,2048*3:]], axis=0)
     X_val = np.concatenate([X_val_chunked[:,:2048*3], X_val_chunked[:,2048*3:]], axis=0)
-    y_train = y_final[n_val:]
-    y_val = y_final[:n_val]
+    y_train = y_final[2*n_val:]
+    y_val = y_final[:2*n_val]
 
     print(X_train, y_train, X_val, y_val)
 
