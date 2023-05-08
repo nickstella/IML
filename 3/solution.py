@@ -184,7 +184,7 @@ def split_for_validation(X: np.ndarray, y: np.ndarray, rate=0.2):
     assert X_tmp_chunked.shape == (119030 // 2, 2048 * 6)
     y_final_chunked = X_y_tmp[:, -2:]
     y_final = np.concatenate([y_final_chunked[:,0], y_final_chunked[:,1]], axis=0).squeeze()
-    assert  y_final.shape == (119030//2, )
+    assert  y_final.shape == (119030, )
 
     n_rows = X_tmp_chunked.shape[0]
     n_val = int(np.floor(rate * n_rows))

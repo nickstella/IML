@@ -99,7 +99,7 @@ def data_loading():
     y_train = train_df[:,-1]
     X_train = np.delete(train_df, -1, axis=1)
 
-    imp.fit(train_df_x)
+    #imp.fit(train_df_x)
     X_test = imp.transform(test_df)
 
     assert (X_train.shape[1] == X_test.shape[1]) and (X_train.shape[0] == y_train.shape[0]) and (
