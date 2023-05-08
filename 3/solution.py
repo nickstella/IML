@@ -182,20 +182,22 @@ def split_for_validation(X: np.ndarray, y: np.ndarray, rate=0.2):
 
     X_tmp_chunked = X_y_tmp[:,:-2]
     assert X_tmp_chunked.shape == (119030 // 2, 2048 * 6)
-    y_final_chunked = X_y_tmp[:, -2:]
-    y_final = np.concatenate([y_final_chunked[:,0], y_final_chunked[:,1]], axis=0).squeeze()
-    assert  y_final.shape == (119030, )
 
     n_rows = X_tmp_chunked.shape[0]
     n_val = int(np.floor(rate * n_rows))
+
+    y_final_chunked = X_y_tmp[:, -2:]
+    y_train_chunked = y_final_chunked[n_val:]
+    y_val_chunked = y_final_chunked[:n_val]
+    y_train = np.concatenate([y_train_chunked[:,0], y_train_chunked[:,1]], axis=0).squeeze()
+    y_val = np.concatenate([y_val_chunked[:, 0], y_val_chunked[:, 1]], axis=0).squeeze()
+    assert  y_train.shape == (95224, ) and y_val.shape == (23806, )
 
     X_train_chunked, X_val_chunked = X_tmp_chunked[n_val:,:], X_tmp_chunked[:n_val,:]
     print(X_train_chunked.shape, X_val_chunked.shape)
 
     X_train = np.concatenate([X_train_chunked[:,:2048*3], X_train_chunked[:,2048*3:]], axis=0)
     X_val = np.concatenate([X_val_chunked[:,:2048*3], X_val_chunked[:,2048*3:]], axis=0)
-    y_train = y_final[2*n_val:]
-    y_val = y_final[:2*n_val]
 
     print(X_train, y_train, X_val, y_val)
 
