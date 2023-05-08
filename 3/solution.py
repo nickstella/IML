@@ -189,7 +189,7 @@ def split_for_validation(X: np.ndarray, y: np.ndarray, rate=0.2):
     n_rows = X_tmp_chunked.shape[0]
     n_val = int(np.floor(rate * n_rows))
 
-    X_train_chunked, X_val_chunked = X_tmp_chunked[:,n_val:], X_tmp_chunked[:,:n_val]
+    X_train_chunked, X_val_chunked = X_tmp_chunked[n_val:,:], X_tmp_chunked[:n_val,:]
     print(X_train_chunked.shape, X_val_chunked.shape)
 
     X_train = np.concatenate([X_train_chunked[:,:2048*3], X_train_chunked[:,2048*3:]], axis=0)
