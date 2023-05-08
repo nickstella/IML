@@ -15,6 +15,7 @@ from matplotlib import pyplot as plt
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+VALIDATION = True
 
 def generate_embeddings():
     """
@@ -168,6 +169,38 @@ def create_loader_from_np(X, y=None, train=True, batch_size=64, shuffle=True, nu
     print("Data loader created.")
     return loader
 
+def split_for_validation(X: np.ndarray, y: np.ndarray, rate=0.2):
+    X_tmp = np.concatenate([X[::2], X[1::2]], axis=1)
+    assert X_tmp.shape == (119030//2, 2048*6)
+    y_tmp = np.concatenate([y[::2,np.newaxis], y[1::2,np.newaxis]], axis=1)
+    assert y_tmp.shape == (119030//2, 2)
+
+    X_y_tmp = np.concatenate([X_tmp,y_tmp], axis=1)
+    assert X_y_tmp.shape == (119030//2, 2048*6+2)
+
+    np.random.shuffle(X_y_tmp)
+
+    X_tmp_chunked = X_y_tmp[:,:-2]
+    assert X_tmp_chunked.shape == (119030 // 2, 2048 * 6)
+    y_final_chunked = X_y_tmp[:, -2:]
+    y_final = np.concatenate([y_final_chunked[:,0], y_final_chunked[:,1]], axis=0).squeeze()
+    assert  y_final.shape == (119030//2, )
+
+    n_rows = X_tmp_chunked.shape[0]
+    n_val = int(np.floor(rate * n_rows))
+
+    X_train_chunked, X_val_chunked = X_tmp_chunked[:,n_val:], X_tmp_chunked[:,:n_val]
+    print(X_train_chunked.shape, X_val_chunked.shape)
+
+    X_train = np.concatenate([X_train_chunked[:,:2048*3], X_train_chunked[:,2048*3:]], axis=0)
+    X_val = np.concatenate([X_val_chunked[:,:2048*3], X_val_chunked[:,2048*3:]], axis=0)
+    y_train = y_final[n_val:]
+    y_val = y_final[:n_val]
+
+    print(X_train, y_train, X_val, y_val)
+
+    return X_train, y_train, X_val, y_val
+
 
 class Net(nn.Module):
     """
@@ -218,7 +251,7 @@ class Net(nn.Module):
 
         return output
 
-def train_model(train_loader, validation=False):
+def train_model(train_loader, val_loader, validation=False):
     """
     The training procedure of the model; it accepts the training data, defines the model
     and then trains it.
@@ -230,6 +263,9 @@ def train_model(train_loader, validation=False):
 
     print("Starting model training...")
 
+    if val_loader is None and validation:
+        raise Exception("Cannot validate without appropriate loader!")
+
     model = Net()
     model.train()
     model.to(device)
@@ -240,21 +276,8 @@ def train_model(train_loader, validation=False):
     # on the validation data before submitting the results on the server. After choosing the
     # best model, train it on the whole training data.
 
-
-    validation_rate = 0.2
-    triplet_num = len(train_loader.dataset)
-    num_validation_data = int(np.floor(validation_rate * triplet_num)) if validation else 0
-    shuffled_data = np.random.permutation(list(range(triplet_num)))
-
-    train_sampler = SubsetRandomSampler(shuffled_data[num_validation_data:])
-    real_train_loader = DataLoader(train_loader.dataset, batch_size=train_loader.batch_size, sampler=train_sampler)
-
-    if validation:
-        validation_sampler = SubsetRandomSampler(shuffled_data[:num_validation_data])
-        validation_loader = DataLoader(train_loader.dataset, batch_size=train_loader.batch_size, sampler=validation_sampler)
-
     criterion = nn.BCELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.02)
 
     losses = []
     accuracies = []
@@ -267,7 +290,7 @@ def train_model(train_loader, validation=False):
         if validation:
             model.train()
 
-        for batch, [X, y] in tqdm(enumerate(real_train_loader),total=len(real_train_loader),leave=False,desc="Batch training"):
+        for batch, [X, y] in tqdm(enumerate(train_loader),total=len(train_loader),leave=False,desc="Batch training"):
             y_pred = model.forward(X).squeeze()
             loss = criterion(y_pred, y.to(torch.float32))
             epoch_losses.append(loss.item())
@@ -287,7 +310,7 @@ def train_model(train_loader, validation=False):
             epoch_accuracies = []
 
             with torch.no_grad():
-                for batch, [X, y] in tqdm(enumerate(validation_loader),total=len(validation_loader),leave=False,desc="Batch validation"):
+                for batch, [X, y] in tqdm(enumerate(val_loader),total=len(val_loader),leave=False,desc="Batch validation"):
                     X = X.to(device)
                     predicted = model.forward(X)
                     predicted_np = predicted.cpu().numpy().squeeze()
@@ -378,11 +401,19 @@ if __name__ == '__main__':
     X_test, _ = get_data(TEST_TRIPLETS, train=False)
 
     # Create data loaders for the training and testing data
-    train_loader = create_loader_from_np(X, y, train=True, batch_size=64)
+    val_loader = None
+
+    if VALIDATION:
+        X_train, y_train, X_val, y_val = split_for_validation(X, y)
+        train_loader = create_loader_from_np(X_train, y_train, train=True, batch_size=64)
+        val_loader = create_loader_from_np(X_val, y_val, train=True, batch_size=64)
+    else:
+        train_loader = create_loader_from_np(X, y, train=True, batch_size=64)
+
     test_loader = create_loader_from_np(X_test, train=False, batch_size=2048, shuffle=False)
 
     # define a model and train it
-    model = train_model(train_loader, validation=False)
+    model = train_model(train_loader, val_loader, validation=VALIDATION)
 
     # test the model on the test data
     test_model(model, test_loader)
