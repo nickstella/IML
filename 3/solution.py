@@ -1,4 +1,3 @@
-
 # First, we import necessary libraries:
 import numpy as np
 from torchvision import transforms
@@ -43,7 +42,7 @@ def generate_embeddings():
     train_loader = DataLoader(dataset=train_dataset,
                               batch_size=64,
                               shuffle=False,
-                              pin_memory=True, num_workers=3)
+                              pin_memory=True, num_workers=8)
 
     # Definition of a model for extraction of the embeddings
     # TODO Nickstar: play with different models
@@ -101,15 +100,8 @@ def get_data(file, train=True):
     embeddings = np.load('dataset/embeddings.npy')
 
     # Normalization of embeddings. Each embedding will now be a 2048-dimensional vector with norm 1.
-
-    #print("Prior to normalization:")
-    #print(embeddings)
-
     norms = np.linalg.norm(embeddings, axis=1)
     embeddings = embeddings / norms[:, np.newaxis]
-
-    #print("After normalization:")
-    #print(embeddings)
 
     file_to_embedding = {}
     for i in range(len(filenames)):
@@ -181,12 +173,17 @@ class Net(nn.Module):
         self.fc1 = nn.Linear(2048, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 128)
-        self.out = nn.Linear(2,1)
+        self.fc4 = nn.Linear(128, 32)
+        self.fc5 = nn.Linear(32, 16)
+        self.out = nn.Linear(16, 2)
 
     def forward_one_embedding(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = F.relu(self.fc3(x))
+        x = F.relu(self.fc4(x))
+        x = F.relu(self.fc5(x))
+        x = F.relu(self.out(x))
         return x
 
     def forward(self, x):
@@ -202,18 +199,42 @@ class Net(nn.Module):
         outB = self.forward_one_embedding(B)
         outC = self.forward_one_embedding(B)
 
-        distance = nn.PairwiseDistance(p=2, keepdim=True)
-        distAB = distance(outA, outB)
-        distAC = distance(outA, outC)
+        #distance = nn.PairwiseDistance(p=2, keepdim=True)
+        #distAB = distance(outA, outB)
+        #distAC = distance(outA, outC)
 
-        distances = torch.cat((distAB,distAC),dim=1)
+        #distances = torch.cat((distAB,distAC),dim=1)
+        #out = F.relu(self.fc4(distances))
+        #out = F.relu(self.fc5(out))
+        #out = torch.sigmoid(self.out(out))
 
-        out = self.out(distances)
-        out = torch.sigmoid(out)
+        return outA, outB, outC
 
-        return out
+class TripletLoss(nn.Module):
+    """
+    Triplet loss
+    Takes embeddings of an anchor sample, a positive sample and a negative sample
+    """
 
-def train_model(train_loader, validation=False):
+    def __init__(self, margin = 2.5):
+        super(TripletLoss, self).__init__()
+        self.margin = margin
+
+    def forward(self, anchor, positive, negative):
+        distance_positive = (anchor - positive).pow(2).sum(1)  # .pow(.5)
+        distance_negative = (anchor - negative).pow(2).sum(1)  # .pow(.5)
+        losses = torch.mean(F.relu(distance_positive - distance_negative + self.margin))
+        return losses
+
+""" class ContrastiveLoss(nn.Module):
+    def __init__(self, margin = 2.5):
+        super(ContrastiveLoss, self).__init__()
+        self.margin = margin
+    def forward(self, output1, output2, label):
+        euclidean_distance = F.pairwise_distance(output1, output2, keepdim=True)
+        loss = torch.mean((1-label)*torch.pow(euclidean_distance, 2) + (label)*torch.pow(torch.clamp(self.margin - euclidean_distance, min = 0.0), 2))"""
+
+def train_model(train_loader, validation=True):
     """
     The training procedure of the model; it accepts the training data, defines the model
     and then trains it.
@@ -228,7 +249,7 @@ def train_model(train_loader, validation=False):
     model = Net()
     model.train()
     model.to(device)
-    n_epochs = 10
+    n_epochs = 100
     # TODO: define a loss function, optimizer and proceed with training. Hint: use the part
     # of the training data as a validation split. After each epoch, compute the loss on the
     # validation split and print it out. This enables you to see how your model is performing
@@ -248,7 +269,7 @@ def train_model(train_loader, validation=False):
         validation_sampler = SubsetRandomSampler(shuffled_data[:num_validation_data])
         validation_loader = DataLoader(train_loader.dataset, batch_size=train_loader.batch_size, sampler=validation_sampler)
 
-    criterion = nn.BCELoss()
+    criterion = TripletLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
     losses = []
@@ -278,10 +299,10 @@ def train_model(train_loader, validation=False):
                 for batch, [X, y] in tqdm(enumerate(validation_loader),total=len(validation_loader),leave=False,desc="Batch validation"):
                     X = X.to(device)
                     predicted = model.forward(X)
-                    predicted_np = predicted.cpu().numpy()
+                    predicted_np = predicted.cpu().numpy().squeeze()
                     # Rounding the predictions to 0 or 1
-                    predicted_np[predicted_np >= 0.5] = 1
-                    predicted_np[predicted_np < 0.5] = 0
+                    predicted_np[predicted_np >= 0.5] = 0
+                    predicted_np[predicted_np < 0.5] = 1
                     predictions.append(predicted_np)
 
                     y_np = y.cpu().numpy()
