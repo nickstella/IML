@@ -1,3 +1,4 @@
+
 # First, we import necessary libraries:
 import numpy as np
 from torchvision import transforms
@@ -10,9 +11,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models import resnet50, ResNet50_Weights
 from tqdm import *
+from matplotlib import pyplot as plt
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+VALIDATION = True
 
 def generate_embeddings():
     """
@@ -42,7 +45,7 @@ def generate_embeddings():
     train_loader = DataLoader(dataset=train_dataset,
                               batch_size=64,
                               shuffle=False,
-                              pin_memory=True, num_workers=8)
+                              pin_memory=True, num_workers=3)
 
     # Definition of a model for extraction of the embeddings
     # TODO Nickstar: play with different models
@@ -100,8 +103,15 @@ def get_data(file, train=True):
     embeddings = np.load('dataset/embeddings.npy')
 
     # Normalization of embeddings. Each embedding will now be a 2048-dimensional vector with norm 1.
+
+    #print("Prior to normalization:")
+    #print(embeddings)
+
     norms = np.linalg.norm(embeddings, axis=1)
     embeddings = embeddings / norms[:, np.newaxis]
+
+    #print("After normalization:")
+    #print(embeddings)
 
     file_to_embedding = {}
     for i in range(len(filenames)):
@@ -159,6 +169,40 @@ def create_loader_from_np(X, y=None, train=True, batch_size=64, shuffle=True, nu
     print("Data loader created.")
     return loader
 
+def split_for_validation(X: np.ndarray, y: np.ndarray, rate=0.2):
+    X_tmp = np.concatenate([X[::2], X[1::2]], axis=1)
+    assert X_tmp.shape == (119030//2, 2048*6)
+    y_tmp = np.concatenate([y[::2,np.newaxis], y[1::2,np.newaxis]], axis=1)
+    assert y_tmp.shape == (119030//2, 2)
+
+    X_y_tmp = np.concatenate([X_tmp,y_tmp], axis=1)
+    assert X_y_tmp.shape == (119030//2, 2048*6+2)
+
+    np.random.shuffle(X_y_tmp)
+
+    X_tmp_chunked = X_y_tmp[:,:-2]
+    assert X_tmp_chunked.shape == (119030 // 2, 2048 * 6)
+
+    n_rows = X_tmp_chunked.shape[0]
+    n_val = int(np.floor(rate * n_rows))
+
+    y_final_chunked = X_y_tmp[:, -2:]
+    y_train_chunked = y_final_chunked[n_val:]
+    y_val_chunked = y_final_chunked[:n_val]
+    y_train = np.concatenate([y_train_chunked[:,0], y_train_chunked[:,1]], axis=0).squeeze()
+    y_val = np.concatenate([y_val_chunked[:, 0], y_val_chunked[:, 1]], axis=0).squeeze()
+    assert  y_train.shape == (95224, ) and y_val.shape == (23806, )
+
+    X_train_chunked, X_val_chunked = X_tmp_chunked[n_val:,:], X_tmp_chunked[:n_val,:]
+    print(X_train_chunked.shape, X_val_chunked.shape)
+
+    X_train = np.concatenate([X_train_chunked[:,:2048*3], X_train_chunked[:,2048*3:]], axis=0)
+    X_val = np.concatenate([X_val_chunked[:,:2048*3], X_val_chunked[:,2048*3:]], axis=0)
+
+    print(X_train, y_train, X_val, y_val)
+
+    return X_train, y_train, X_val, y_val
+
 
 class Net(nn.Module):
     """
@@ -172,18 +216,20 @@ class Net(nn.Module):
         super().__init__()
         self.fc1 = nn.Linear(2048, 512)
         self.fc2 = nn.Linear(512, 256)
+        self.drop1 = nn.Dropout(p = 0.5)
         self.fc3 = nn.Linear(256, 128)
-        self.fc4 = nn.Linear(128, 32)
-        self.fc5 = nn.Linear(32, 16)
-        self.out = nn.Linear(16, 2)
+        self.drop2 = nn.Dropout(p = 0.5)
+        self.fc4 = nn.Linear(128,32)
+        self.fc5 = nn.Linear(32, 2)
 
     def forward_one_embedding(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
+        x = self.drop1(x)
         x = F.relu(self.fc3(x))
+        x = self.drop2(x)
         x = F.relu(self.fc4(x))
         x = F.relu(self.fc5(x))
-        x = F.relu(self.out(x))
         return x
 
     def forward(self, x):
@@ -204,37 +250,14 @@ class Net(nn.Module):
         #distAC = distance(outA, outC)
 
         #distances = torch.cat((distAB,distAC),dim=1)
-        #out = F.relu(self.fc4(distances))
-        #out = F.relu(self.fc5(out))
-        #out = torch.sigmoid(self.out(out))
+
+        #output = F.relu(self.fc4(distances))
+        #output = F.relu(self.fc5(output))
+        #output = F.relu(self.out(output)
 
         return outA, outB, outC
 
-class TripletLoss(nn.Module):
-    """
-    Triplet loss
-    Takes embeddings of an anchor sample, a positive sample and a negative sample
-    """
-
-    def __init__(self, margin = 2.5):
-        super(TripletLoss, self).__init__()
-        self.margin = margin
-
-    def forward(self, anchor, positive, negative):
-        distance_positive = (anchor - positive).pow(2).sum(1)  # .pow(.5)
-        distance_negative = (anchor - negative).pow(2).sum(1)  # .pow(.5)
-        losses = torch.mean(F.relu(distance_positive - distance_negative + self.margin))
-        return losses
-
-""" class ContrastiveLoss(nn.Module):
-    def __init__(self, margin = 2.5):
-        super(ContrastiveLoss, self).__init__()
-        self.margin = margin
-    def forward(self, output1, output2, label):
-        euclidean_distance = F.pairwise_distance(output1, output2, keepdim=True)
-        loss = torch.mean((1-label)*torch.pow(euclidean_distance, 2) + (label)*torch.pow(torch.clamp(self.margin - euclidean_distance, min = 0.0), 2))"""
-
-def train_model(train_loader, validation=True):
+def train_model(train_loader, val_loader, validation=False):
     """
     The training procedure of the model; it accepts the training data, defines the model
     and then trains it.
@@ -246,77 +269,100 @@ def train_model(train_loader, validation=True):
 
     print("Starting model training...")
 
+    if val_loader is None and validation:
+        raise Exception("Cannot validate without appropriate loader!")
+
     model = Net()
     model.train()
     model.to(device)
-    n_epochs = 100
+    n_epochs = 30
     # TODO: define a loss function, optimizer and proceed with training. Hint: use the part
     # of the training data as a validation split. After each epoch, compute the loss on the
     # validation split and print it out. This enables you to see how your model is performing
     # on the validation data before submitting the results on the server. After choosing the
     # best model, train it on the whole training data.
 
-
-    validation_rate = 0.2
-    triplet_num = len(train_loader.dataset)
-    num_validation_data = int(np.floor(validation_rate * triplet_num)) if validation else 0
-    shuffled_data = np.random.permutation(list(range(triplet_num)))
-
-    train_sampler = SubsetRandomSampler(shuffled_data[num_validation_data:])
-    real_train_loader = DataLoader(train_loader.dataset, batch_size=train_loader.batch_size, sampler=train_sampler)
-
-    if validation:
-        validation_sampler = SubsetRandomSampler(shuffled_data[:num_validation_data])
-        validation_loader = DataLoader(train_loader.dataset, batch_size=train_loader.batch_size, sampler=validation_sampler)
-
-    criterion = TripletLoss()
+    criterion = nn.TripletMarginLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
     losses = []
+    accuracies = []
+
 
     for epoch in tqdm(range(n_epochs), desc="Epoch"):
+
+        epoch_losses = []
 
         if validation:
             model.train()
 
-        for batch, [X, y] in tqdm(enumerate(real_train_loader),total=len(real_train_loader),leave=False,desc="Batch training"):
+        for batch, [X, y] in tqdm(enumerate(train_loader),total=len(train_loader),leave=False,desc="Batch training"):
             y_pred = model.forward(X).squeeze()
             loss = criterion(y_pred, y.to(torch.float32))
-            losses.append(loss)
+            epoch_losses.append(loss.item())
             tqdm.write(f'epoch: {epoch:2} batch: {batch:2}   loss: {loss.item():10.8f}')
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
+        avg_loss = sum(epoch_losses)/len(epoch_losses)
+        losses.append(avg_loss)
+
         if validation:
             predictions = []
             model.eval()
 
-            accuracies = []
+            epoch_accuracies = []
 
             with torch.no_grad():
-                for batch, [X, y] in tqdm(enumerate(validation_loader),total=len(validation_loader),leave=False,desc="Batch validation"):
+                for batch, [X, y] in tqdm(enumerate(val_loader),total=len(val_loader),leave=False,desc="Batch validation"):
                     X = X.to(device)
                     predicted = model.forward(X)
                     predicted_np = predicted.cpu().numpy().squeeze()
                     # Rounding the predictions to 0 or 1
-                    predicted_np[predicted_np >= 0.5] = 0
-                    predicted_np[predicted_np < 0.5] = 1
+                    predicted_np[predicted_np >= 0.5] = 1
+                    predicted_np[predicted_np < 0.5] = 0
                     predictions.append(predicted_np)
 
                     y_np = y.cpu().numpy()
+
+                    #print(y_np)
+                    #print(y_np.shape)
+                    #print(predicted_np)
+                    #print(predicted_np.shape)
+                    #print(y_np==predicted_np)
+                    #print()
+                    #print(np.count_nonzero(y_np==predicted_np))
+
 
                     assert len(y_np) == len(predicted_np)
 
                     correct = np.count_nonzero(y_np==predicted_np)
                     accuracy = correct / len(y_np)
 
-                    accuracies.append(accuracy)
+                    epoch_accuracies.append(accuracy)
 
                     tqdm.write(f"epoch: {epoch:2} batch: {batch:2}   prediction accuracy: {accuracy}")
 
-            tqdm.write(f"Epoch {epoch:2} overall accuracy: {sum(accuracies)/len(accuracies)}")
+            avg_accuracy = sum(epoch_accuracies)/len(epoch_accuracies)
+            accuracies.append(avg_accuracy)
+            tqdm.write(f"Epoch {epoch:2} overall accuracy: {avg_accuracy}")
+
+
+    try:
+        fig, ax = plt.subplots(2)
+        if validation:
+            ax[1].set_title('Accuracy in epochs')
+            ax[1].plot([i for i in range(n_epochs)], [item for item in accuracies])
+            print(accuracies)
+
+        ax[0].set_title('Loss in epochs')
+        ax[0].plot([i for i in range(n_epochs)], [item for item in losses])
+
+        plt.show()
+    except:
+        pass
 
     return model
 
@@ -361,11 +407,19 @@ if __name__ == '__main__':
     X_test, _ = get_data(TEST_TRIPLETS, train=False)
 
     # Create data loaders for the training and testing data
-    train_loader = create_loader_from_np(X, y, train=True, batch_size=64)
+    val_loader = None
+
+    if VALIDATION:
+        X_train, y_train, X_val, y_val = split_for_validation(X, y)
+        train_loader = create_loader_from_np(X_train, y_train, train=True, batch_size=64)
+        val_loader = create_loader_from_np(X_val, y_val, train=True, batch_size=64)
+    else:
+        train_loader = create_loader_from_np(X, y, train=True, batch_size=64)
+
     test_loader = create_loader_from_np(X_test, train=False, batch_size=2048, shuffle=False)
 
     # define a model and train it
-    model = train_model(train_loader)
+    model = train_model(train_loader, val_loader, validation=VALIDATION)
 
     # test the model on the test data
     test_model(model, test_loader)
