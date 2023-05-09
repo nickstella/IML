@@ -297,8 +297,14 @@ def train_model(train_loader, val_loader, validation=False):
             model.train()
 
         for batch, [X, y] in tqdm(enumerate(train_loader),total=len(train_loader),leave=False,desc="Batch training"):
-            y_pred = model.forward(X).squeeze()
-            loss = criterion(y_pred, y.to(torch.float32))
+
+            outA, outB, outC = model.forward(X)
+
+            mask = (y == 1).unsqueeze(1)
+            outP = torch.where(mask, outB, outC)
+            outN = torch.where(mask, outC, outB)
+
+            loss = criterion(outA, outP, outN)
             epoch_losses.append(loss.item())
             tqdm.write(f'epoch: {epoch:2} batch: {batch:2}   loss: {loss.item():10.8f}')
 
@@ -318,11 +324,16 @@ def train_model(train_loader, val_loader, validation=False):
             with torch.no_grad():
                 for batch, [X, y] in tqdm(enumerate(val_loader),total=len(val_loader),leave=False,desc="Batch validation"):
                     X = X.to(device)
-                    predicted = model.forward(X)
-                    predicted_np = predicted.cpu().numpy().squeeze()
-                    # Rounding the predictions to 0 or 1
-                    predicted_np[predicted_np >= 0.5] = 1
-                    predicted_np[predicted_np < 0.5] = 0
+                    outA, outB, outC = model.forward(X)
+
+                    distance = nn.PairwiseDistance(p=2)
+                    distAB = distance(outA, outB)
+                    distAC = distance(outA, outC)
+
+                    predicted = distAB <= distAC
+                    predicted_np = predicted.cpu().numpy()
+
+                    predicted_np.astype(int)
                     predictions.append(predicted_np)
 
                     y_np = y.cpu().numpy()
@@ -383,11 +394,18 @@ def test_model(model, loader):
     with torch.no_grad():  # We don't need to compute gradients for testing
         for [x_batch] in loader:
             x_batch = x_batch.to(device)
-            predicted = model(x_batch)
-            predicted = predicted.cpu().numpy()
-            # Rounding the predictions to 0 or 1
-            predicted[predicted >= 0.5] = 1
-            predicted[predicted < 0.5] = 0
+
+            outA, outB, outC = model.forward(x_batch)
+
+            distance = nn.PairwiseDistance(p=2)
+            distAB = distance(outA, outB)
+            distAC = distance(outA, outC)
+
+            predicted = distAB <= distAC
+            predicted_np = predicted.cpu().numpy()
+
+            predicted_np = predicted_np.astype(int)
+
             predictions.append(predicted)
         predictions = np.vstack(predictions)
     np.savetxt("results.txt", predictions, fmt='%i')
