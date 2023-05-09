@@ -262,7 +262,7 @@ def train_model(train_loader, val_loader, validation=False):
     model = Net()
     model.train()
     model.to(device)
-    n_epochs = 30
+    n_epochs = 3
     # TODO: define a loss function, optimizer and proceed with training. Hint: use the part
     # of the training data as a validation split. After each epoch, compute the loss on the
     # validation split and print it out. This enables you to see how your model is performing
@@ -382,7 +382,7 @@ def test_model(model, loader):
             predicted = distAB <= distAC
             predicted_np = predicted.cpu().numpy()
 
-            predicted_np = predicted_np.astype(int)
+            predicted_np = predicted_np.astype(int)[:,np.newaxis]
 
             predictions.append(predicted_np)
         predictions = np.vstack(predictions)
