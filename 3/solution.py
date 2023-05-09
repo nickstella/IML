@@ -215,21 +215,18 @@ class Net(nn.Module):
         """
         super().__init__()
         self.fc1 = nn.Linear(2048, 512)
-        self.fc2 = nn.Linear(512, 256)
         self.drop1 = nn.Dropout(p = 0.5)
+        self.fc2 = nn.Linear(512, 256)
+        self.drop2 = nn.Dropout(p=0.5)
         self.fc3 = nn.Linear(256, 128)
-        self.drop2 = nn.Dropout(p = 0.5)
-        self.fc4 = nn.Linear(128,32)
-        self.fc5 = nn.Linear(32, 2)
 
     def forward_one_embedding(self, x):
         x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
         x = self.drop1(x)
-        x = F.relu(self.fc3(x))
+        x = F.relu(self.fc2(x))
         x = self.drop2(x)
-        x = F.relu(self.fc4(x))
-        x = F.relu(self.fc5(x))
+        x = F.relu(self.fc3(x))
+
         return x
 
     def forward(self, x):
@@ -243,17 +240,7 @@ class Net(nn.Module):
         A, B, C = torch.chunk(x,3,dim=1)
         outA = self.forward_one_embedding(A)
         outB = self.forward_one_embedding(B)
-        outC = self.forward_one_embedding(B)
-
-        #distance = nn.PairwiseDistance(p=2, keepdim=True)
-        #distAB = distance(outA, outB)
-        #distAC = distance(outA, outC)
-
-        #distances = torch.cat((distAB,distAC),dim=1)
-
-        #output = F.relu(self.fc4(distances))
-        #output = F.relu(self.fc5(output))
-        #output = F.relu(self.out(output)
+        outC = self.forward_one_embedding(C)
 
         return outA, outB, outC
 
@@ -338,15 +325,6 @@ def train_model(train_loader, val_loader, validation=False):
 
                     y_np = y.cpu().numpy()
 
-                    #print(y_np)
-                    #print(y_np.shape)
-                    #print(predicted_np)
-                    #print(predicted_np.shape)
-                    #print(y_np==predicted_np)
-                    #print()
-                    #print(np.count_nonzero(y_np==predicted_np))
-
-
                     assert len(y_np) == len(predicted_np)
 
                     correct = np.count_nonzero(y_np==predicted_np)
@@ -406,7 +384,7 @@ def test_model(model, loader):
 
             predicted_np = predicted_np.astype(int)
 
-            predictions.append(predicted)
+            predictions.append(predicted_np)
         predictions = np.vstack(predictions)
     np.savetxt("results.txt", predictions, fmt='%i')
 
