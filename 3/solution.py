@@ -15,7 +15,7 @@ from matplotlib import pyplot as plt
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-VALIDATION = True
+VALIDATION = False
 
 def generate_embeddings():
     """
@@ -43,9 +43,9 @@ def generate_embeddings():
 
     # Images are loaded in an iterable DataLoader object
     train_loader = DataLoader(dataset=train_dataset,
-                              batch_size=64,
+                              batch_size=128,
                               shuffle=False,
-                              pin_memory=True, num_workers=3)
+                              pin_memory=True, num_workers=8)
 
     # Definition of a model for extraction of the embeddings
     # TODO Nickstar: play with different models
@@ -144,7 +144,7 @@ def get_data(file, train=True):
 
 
 # Hint: adjust batch_size and num_workers to your PC configuration, so that you don't run out of memory
-def create_loader_from_np(X, y=None, train=True, batch_size=64, shuffle=True, num_workers=8):
+def create_loader_from_np(X, y=None, train=True, batch_size=128, shuffle=True, num_workers=8):
     """
     Create a torch.utils.data.DataLoader object from numpy arrays containing the data.
 
@@ -215,16 +215,18 @@ class Net(nn.Module):
         """
         super().__init__()
         self.fc1 = nn.Linear(2048, 512)
+        self.drop1 = nn.Dropout(p = 0.5)
         self.fc2 = nn.Linear(512, 256)
+        self.drop2 = nn.Dropout(p=0.5)
         self.fc3 = nn.Linear(256, 128)
-        self.fc4 = nn.Linear(2,32)
-        self.fc5 = nn.Linear(32, 16)
-        self.out = nn.Linear(16,1)
 
     def forward_one_embedding(self, x):
         x = F.relu(self.fc1(x))
+        x = self.drop1(x)
         x = F.relu(self.fc2(x))
+        x = self.drop2(x)
         x = F.relu(self.fc3(x))
+
         return x
 
     def forward(self, x):
@@ -238,20 +240,9 @@ class Net(nn.Module):
         A, B, C = torch.chunk(x,3,dim=1)
         outA = self.forward_one_embedding(A)
         outB = self.forward_one_embedding(B)
-        outC = self.forward_one_embedding(B)
+        outC = self.forward_one_embedding(C)
 
-        distance = nn.PairwiseDistance(p=2, keepdim=True)
-        distAB = distance(outA, outB)
-        distAC = distance(outA, outC)
-
-        distances = torch.cat((distAB,distAC),dim=1)
-
-        output = F.relu(self.fc4(distances))
-        output = F.relu(self.fc5(output))
-        output = self.out(output)
-        output = torch.sigmoid(output)
-
-        return output
+        return outA, outB, outC
 
 def train_model(train_loader, val_loader, validation=False):
     """
@@ -271,15 +262,15 @@ def train_model(train_loader, val_loader, validation=False):
     model = Net()
     model.train()
     model.to(device)
-    n_epochs = 1
+    n_epochs = 2
     # TODO: define a loss function, optimizer and proceed with training. Hint: use the part
     # of the training data as a validation split. After each epoch, compute the loss on the
     # validation split and print it out. This enables you to see how your model is performing
     # on the validation data before submitting the results on the server. After choosing the
     # best model, train it on the whole training data.
 
-    criterion = nn.BCELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.02)
+    criterion = nn.TripletMarginLoss(margin = 0.2)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.00075)
 
     losses = []
     accuracies = []
@@ -293,8 +284,14 @@ def train_model(train_loader, val_loader, validation=False):
             model.train()
 
         for batch, [X, y] in tqdm(enumerate(train_loader),total=len(train_loader),leave=False,desc="Batch training"):
-            y_pred = model.forward(X).squeeze()
-            loss = criterion(y_pred, y.to(torch.float32))
+
+            outA, outB, outC = model.forward(X)
+
+            mask = (y == 1).unsqueeze(1)
+            outP = torch.where(mask, outB, outC)
+            outN = torch.where(mask, outC, outB)
+
+            loss = criterion(outA, outP, outN)
             epoch_losses.append(loss.item())
             tqdm.write(f'epoch: {epoch:2} batch: {batch:2}   loss: {loss.item():10.8f}')
 
@@ -314,23 +311,19 @@ def train_model(train_loader, val_loader, validation=False):
             with torch.no_grad():
                 for batch, [X, y] in tqdm(enumerate(val_loader),total=len(val_loader),leave=False,desc="Batch validation"):
                     X = X.to(device)
-                    predicted = model.forward(X)
-                    predicted_np = predicted.cpu().numpy().squeeze()
-                    # Rounding the predictions to 0 or 1
-                    predicted_np[predicted_np >= 0.5] = 1
-                    predicted_np[predicted_np < 0.5] = 0
+                    outA, outB, outC = model.forward(X)
+
+                    distance = nn.PairwiseDistance(p=2)
+                    distAB = distance(outA, outB)
+                    distAC = distance(outA, outC)
+
+                    predicted = distAB <= distAC
+                    predicted_np = predicted.cpu().numpy()
+
+                    predicted_np.astype(int)
                     predictions.append(predicted_np)
 
                     y_np = y.cpu().numpy()
-
-                    #print(y_np)
-                    #print(y_np.shape)
-                    #print(predicted_np)
-                    #print(predicted_np.shape)
-                    #print(y_np==predicted_np)
-                    #print()
-                    #print(np.count_nonzero(y_np==predicted_np))
-
 
                     assert len(y_np) == len(predicted_np)
 
@@ -379,12 +372,19 @@ def test_model(model, loader):
     with torch.no_grad():  # We don't need to compute gradients for testing
         for [x_batch] in loader:
             x_batch = x_batch.to(device)
-            predicted = model(x_batch)
-            predicted = predicted.cpu().numpy()
-            # Rounding the predictions to 0 or 1
-            predicted[predicted >= 0.5] = 1
-            predicted[predicted < 0.5] = 0
-            predictions.append(predicted)
+
+            outA, outB, outC = model.forward(x_batch)
+
+            distance = nn.PairwiseDistance(p=2)
+            distAB = distance(outA, outB)
+            distAC = distance(outA, outC)
+
+            predicted = distAB <= distAC
+            predicted_np = predicted.cpu().numpy()
+
+            predicted_np = predicted_np.astype(int)[:,np.newaxis]
+
+            predictions.append(predicted_np)
         predictions = np.vstack(predictions)
     np.savetxt("results.txt", predictions, fmt='%i')
 
@@ -407,10 +407,10 @@ if __name__ == '__main__':
 
     if VALIDATION:
         X_train, y_train, X_val, y_val = split_for_validation(X, y)
-        train_loader = create_loader_from_np(X_train, y_train, train=True, batch_size=64)
-        val_loader = create_loader_from_np(X_val, y_val, train=True, batch_size=64)
+        train_loader = create_loader_from_np(X_train, y_train, train=True, batch_size=128)
+        val_loader = create_loader_from_np(X_val, y_val, train=True, batch_size=128)
     else:
-        train_loader = create_loader_from_np(X, y, train=True, batch_size=64)
+        train_loader = create_loader_from_np(X, y, train=True, batch_size=128)
 
     test_loader = create_loader_from_np(X_test, train=False, batch_size=2048, shuffle=False)
 
