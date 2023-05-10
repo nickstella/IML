@@ -154,3 +154,10 @@ cython_debug/
 .DS_Store
 
 3/dataset
+3/results.txt
+
+4/pretrain_features.csv
+4/pretrain_labels.csv
+4/test_features.csv
+4/train_features.csv
+4/train_labels.csv
