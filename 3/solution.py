@@ -15,7 +15,7 @@ from matplotlib import pyplot as plt
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-VALIDATION = True
+VALIDATION = False
 
 def generate_embeddings():
     """
@@ -43,9 +43,9 @@ def generate_embeddings():
 
     # Images are loaded in an iterable DataLoader object
     train_loader = DataLoader(dataset=train_dataset,
-                              batch_size=64,
+                              batch_size=128,
                               shuffle=False,
-                              pin_memory=True, num_workers=3)
+                              pin_memory=True, num_workers=8)
 
     # Definition of a model for extraction of the embeddings
     # TODO Nickstar: play with different models
@@ -144,7 +144,7 @@ def get_data(file, train=True):
 
 
 # Hint: adjust batch_size and num_workers to your PC configuration, so that you don't run out of memory
-def create_loader_from_np(X, y=None, train=True, batch_size=64, shuffle=True, num_workers=8):
+def create_loader_from_np(X, y=None, train=True, batch_size=128, shuffle=True, num_workers=8):
     """
     Create a torch.utils.data.DataLoader object from numpy arrays containing the data.
 
@@ -262,15 +262,15 @@ def train_model(train_loader, val_loader, validation=False):
     model = Net()
     model.train()
     model.to(device)
-    n_epochs = 3
+    n_epochs = 2
     # TODO: define a loss function, optimizer and proceed with training. Hint: use the part
     # of the training data as a validation split. After each epoch, compute the loss on the
     # validation split and print it out. This enables you to see how your model is performing
     # on the validation data before submitting the results on the server. After choosing the
     # best model, train it on the whole training data.
 
-    criterion = nn.TripletMarginLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    criterion = nn.TripletMarginLoss(margin = 0.2)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.00075)
 
     losses = []
     accuracies = []
@@ -407,10 +407,10 @@ if __name__ == '__main__':
 
     if VALIDATION:
         X_train, y_train, X_val, y_val = split_for_validation(X, y)
-        train_loader = create_loader_from_np(X_train, y_train, train=True, batch_size=64)
-        val_loader = create_loader_from_np(X_val, y_val, train=True, batch_size=64)
+        train_loader = create_loader_from_np(X_train, y_train, train=True, batch_size=128)
+        val_loader = create_loader_from_np(X_val, y_val, train=True, batch_size=128)
     else:
-        train_loader = create_loader_from_np(X, y, train=True, batch_size=64)
+        train_loader = create_loader_from_np(X, y, train=True, batch_size=128)
 
     test_loader = create_loader_from_np(X_test, train=False, batch_size=2048, shuffle=False)
 
