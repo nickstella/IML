@@ -156,8 +156,8 @@ cython_debug/
 3/dataset
 3/results.txt
 
-4/pretrain_features.csv
-4/pretrain_labels.csv
-4/test_features.csv
-4/train_features.csv
-4/train_labels.csv
+4/pretrain_features.csv.zip
+4/pretrain_labels.csv.zip
+4/test_features.csv.zip
+4/train_features.csv.zip
+4/train_labels.csv.zip
