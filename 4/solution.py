@@ -3,11 +3,15 @@ import pandas as pd
 import numpy as np
 import torch
 import torch.nn as nn
-
 from sklearn.model_selection import train_test_split
 from sklearn.base import BaseEstimator, TransformerMixin
 
-
+INPUT_SIZE = 100
+HIDDEN_LAYERS_SIZES = [50, 16]
+OUTPUT_SIZE = 1
+NUMBER_OF_EPOCHS = 5
+LEARNING_RATE = 0.001
+BATCH_SIZE = 128
 
 def load_data():
     """
@@ -32,7 +36,7 @@ class Net(nn.Module):
     """
     The model class, which defines our feature extractor used in pretraining.
     """
-    def __init__(self):
+    def __init__(self, input_size, hidden_layers_sizes, output_size):
         """
         The constructor of the model.
         """
@@ -40,6 +44,22 @@ class Net(nn.Module):
         # TODO: Define the architecture of the model. It should be able to be trained on pretraing data 
         # and then used to extract features from the training and test data.
 
+        layers = []
+
+        # Input layer
+        layers.append(nn.Linear(input_size, hidden_layers_sizes[0]))
+        layers.append(nn.ReLU())
+
+        # Hidden layers
+        for i in range(1, len(hidden_layers_sizes)):
+            layers.append(nn.Linear(hidden_layers_sizes[i-1], hidden_layers_sizes[i]))
+            layers.append(nn.ReLU())
+
+        # Output layer
+        layers.append(nn.Linear(hidden_layers_sizes[-1], output_size))
+
+        # Sequential model
+        self.model = nn.Sequential(*layers)
 
     def forward(self, x):
         """
@@ -49,11 +69,14 @@ class Net(nn.Module):
 
         output: x: torch.Tensor, the output of the model
         """
+
         # TODO: Implement the forward pass of the model, in accordance with the architecture 
         # defined in the constructor.
+
+        x = self.model(x)
         return x
     
-def make_feature_extractor(x, y, batch_size=256, eval_size=1000):
+def make_feature_extractor(x, y, batch_size=BATCH_SIZE, eval_size=1000):
     """
     This function trains the feature extractor on the pretraining data and returns a function which
     can be used to extract features from the training and test data.
@@ -72,11 +95,45 @@ def make_feature_extractor(x, y, batch_size=256, eval_size=1000):
     y_tr, y_val = torch.tensor(y_tr, dtype=torch.float), torch.tensor(y_val, dtype=torch.float)
 
     # model declaration
-    model = Net()
-    model.train()
-    
+    model = Net(input_size=INPUT_SIZE, hidden_layers_sizes=HIDDEN_LAYERS_SIZES, output_size=OUTPUT_SIZE)
+
     # TODO: Implement the training loop. The model should be trained on the pretraining data. Use validation set 
     # to monitor the loss.
+
+    criterion = nn.MSELoss()
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=LEARNING_RATE)
+
+    for epoch in range(NUMBER_OF_EPOCHS):
+
+        # Training
+        model.train()
+        train_loss = 0.0
+        for i in range(0, len(x_tr), batch_size):
+            X = x_tr[i : i+batch_size,]
+            y = y_tr[i : i+batch_size]
+            optimizer.zero_grad()
+            outputs = model(X)
+            loss = criterion(outputs, y)
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
+        avg_train_loss = train_loss / (len(x_tr) // batch_size)
+
+        # Validation
+        model.eval()
+        validation_loss = 0.0
+
+        with torch.no_grad:
+            for i in range(0, len(x_val), batch_size):
+                X = x_tr[i: i + batch_size,]
+                y = y_tr[i: i + batch_size]
+                outputs = model(X)
+                loss = criterion(outputs, y)
+                validation_loss += loss.item()
+        avg_validation_loss = validation_loss / (len(x_val) // batch_size)
+
+        print(f"Epoch {epoch + 1}/{NUMBER_OF_EPOCHS}: Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
+
 
 
 
