@@ -2,6 +2,7 @@
 import pandas as pd
 import numpy as np
 import sklearn.linear_model
+from sklearn.linear_model import RidgeCV
 import torch
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
@@ -151,7 +152,6 @@ def make_feature_extractor(x, y, batch_size=BATCH_SIZE, eval_size=10000):
         model.eval()
         # TODO: Implement the feature extraction, a part of a pretrained model used later in the pipeline.
 
-
         #La net di prima, ma fino al layer prima di quello output
         return x
 
@@ -194,7 +194,7 @@ def get_regression_model():
     """
     # TODO: Implement the regression model. It should be able to be trained on the features extracted
     # by the feature extractor.
-    model = sklearn.linear_model.RidgeCV(alphas = (0.01, 1.0, 100)) #default: leave one out cross-validation technique (efficient)
+    model = RidgeCV(alphas = (0.01, 1.0, 100)) #default: leave one out cross-validation technique (efficient)
     return model
 
 # Main function. You don't have to change this
