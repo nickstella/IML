@@ -11,7 +11,7 @@ HIDDEN_LAYERS_SIZES = [50, 16]
 OUTPUT_SIZE = 1
 NUMBER_OF_EPOCHS = 5
 LEARNING_RATE = 0.001
-BATCH_SIZE = 128
+BATCH_SIZE = 256
 
 def load_data():
     """
@@ -76,7 +76,7 @@ class Net(nn.Module):
         x = self.model(x)
         return x
     
-def make_feature_extractor(x, y, batch_size=BATCH_SIZE, eval_size=1000):
+def make_feature_extractor(x, y, batch_size=BATCH_SIZE, eval_size=10000):
     """
     This function trains the feature extractor on the pretraining data and returns a function which
     can be used to extract features from the training and test data.
@@ -132,7 +132,7 @@ def make_feature_extractor(x, y, batch_size=BATCH_SIZE, eval_size=1000):
                 validation_loss += loss.item()
         avg_validation_loss = validation_loss / (len(x_val) // batch_size)
 
-        print(f"Epoch {epoch + 1}/{NUMBER_OF_EPOCHS}: Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
+        print(f"Epoch {epoch + 1}/{NUMBER_OF_EPOCHS}: Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_validation_loss:.4f}")
 
 
 
@@ -149,6 +149,8 @@ def make_feature_extractor(x, y, batch_size=BATCH_SIZE, eval_size=1000):
         """
         model.eval()
         # TODO: Implement the feature extraction, a part of a pretrained model used later in the pipeline.
+
+        #La net di prima, ma fino al layer prima di quello output
         return x
 
     return make_features
@@ -198,7 +200,6 @@ if __name__ == '__main__':
     # Load data
     x_pretrain, y_pretrain, x_train, y_train, x_test = load_data()
     print("Data loaded!")
-    exit()
     # Utilize pretraining data by creating feature extractor which extracts lumo energy 
     # features from available initial features
     feature_extractor =  make_feature_extractor(x_pretrain, y_pretrain)
