@@ -159,7 +159,7 @@ def make_feature_extractor(x, y, batch_size=BATCH_SIZE, eval_size=10000):
 
         model.eval()
         with torch.no_grad():
-            y_pred = model.model_cut(x_tens)
+            y_pred = model.get_features(x_tens)
 
         return y_pred
 
