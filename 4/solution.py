@@ -61,7 +61,8 @@ class Net(nn.Module):
         layers.append(nn.Linear(hidden_layers_sizes[-1], output_size))
 
         # Sequential model
-        self.model = nn.Sequential(*layers)
+        self.model_cut = nn.Sequential(*layers[:-1])
+        self.model_whole = nn.Sequential(*layers)
 
     def forward(self, x):
         """
@@ -75,7 +76,11 @@ class Net(nn.Module):
         # TODO: Implement the forward pass of the model, in accordance with the architecture 
         # defined in the constructor.
 
-        x = self.model(x)
+        x = self.model_whole(x)
+        return x
+
+    def get_features(self, x):
+        x = self.model_cut(x)
         return x
     
 def make_feature_extractor(x, y, batch_size=BATCH_SIZE, eval_size=10000):
@@ -125,7 +130,7 @@ def make_feature_extractor(x, y, batch_size=BATCH_SIZE, eval_size=10000):
         model.eval()
         validation_loss = 0.0
 
-        with torch.no_grad:
+        with torch.no_grad():
             for i in range(0, len(x_val), batch_size):
                 X = x_tr[i: i + batch_size,]
                 y = y_tr[i: i + batch_size]
@@ -149,11 +154,14 @@ def make_feature_extractor(x, y, batch_size=BATCH_SIZE, eval_size=10000):
         output: features: np.ndarray, the features extracted from the training or test set, propagated
         further in the pipeline
         """
-        model.eval()
-        # TODO: Implement the feature extraction, a part of a pretrained model used later in the pipeline.
 
-        #La net di prima, ma fino al layer prima di quello output
-        return x
+        x_tens = torch.tensor(x, dtype=torch.float)
+
+        model.eval()
+        with torch.no_grad():
+            y_pred = model.model_cut(x_tens)
+
+        return y_pred
 
     return make_features
 
@@ -205,6 +213,8 @@ if __name__ == '__main__':
     # Utilize pretraining data by creating feature extractor which extracts lumo energy 
     # features from available initial features
     feature_extractor =  make_feature_extractor(x_pretrain, y_pretrain)
+    feature_extractor(x_pretrain)
+    exit()
     PretrainedFeatureClass = make_pretraining_class({"pretrain": feature_extractor})
     
     # regression model
