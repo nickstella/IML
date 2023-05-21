@@ -1,7 +1,10 @@
 # First, we import necessary libraries:
 import pandas as pd
 import numpy as np
+from sklearn.pipeline import Pipeline
 import sklearn.linear_model
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import RidgeCV
 import torch
 import torch.nn as nn
@@ -187,7 +190,7 @@ def make_pretraining_class(feature_extractors):
 
         def transform(self, X):
             assert self.feature_extractor is not None
-            X_new = feature_extractors[self.feature_extractor](X)
+            X_new = feature_extractors[self.feature_extractor](X).numpy()
             return X_new
         
     return PretrainedFeatures
@@ -203,6 +206,7 @@ def get_regression_model():
     # TODO: Implement the regression model. It should be able to be trained on the features extracted
     # by the feature extractor.
     model = RidgeCV(alphas = (0.01, 1.0, 100)) #default: leave one out cross-validation technique (efficient)
+
     return model
 
 # Main function. You don't have to change this
@@ -212,17 +216,22 @@ if __name__ == '__main__':
     print("Data loaded!")
     # Utilize pretraining data by creating feature extractor which extracts lumo energy 
     # features from available initial features
-    feature_extractor =  make_feature_extractor(x_pretrain, y_pretrain)
+    feature_extractor = make_feature_extractor(x_pretrain, y_pretrain)
     feature_extractor(x_pretrain)
-    exit()
     PretrainedFeatureClass = make_pretraining_class({"pretrain": feature_extractor})
     
     # regression model
     regression_model = get_regression_model()
-
     y_pred = np.zeros(x_test.shape[0])
     # TODO: Implement the pipeline. It should contain feature extraction and regression. You can optionally
     # use other sklearn tools, such as StandardScaler, FunctionTransformer, etc.
+    pipeline = Pipeline([('pretrainedfeatureselector', PretrainedFeatureClass(feature_extractor="pretrain")),
+                         ('scale', StandardScaler()),
+                         ('reg', regression_model)])
+    pipeline.fit(x_train, y_train)
+    score = pipeline.score(x_train, y_train)
+    print(f"Score = {score}")
+    y_pred = pipeline.predict(x_test.to_numpy())
 
 
     assert y_pred.shape == (x_test.shape[0],)
