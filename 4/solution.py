@@ -8,8 +8,8 @@ import torch.nn as nn
 from sklearn.model_selection import train_test_split
 from sklearn.base import BaseEstimator, TransformerMixin
 
-INPUT_SIZE = 100
-HIDDEN_LAYERS_SIZES = [50, 16]
+INPUT_SIZE = 1000
+HIDDEN_LAYERS_SIZES = [400, 128, 16]
 OUTPUT_SIZE = 1
 NUMBER_OF_EPOCHS = 5
 LEARNING_RATE = 0.001
@@ -213,6 +213,7 @@ if __name__ == '__main__':
     y_pred = np.zeros(x_test.shape[0])
     # TODO: Implement the pipeline. It should contain feature extraction and regression. You can optionally
     # use other sklearn tools, such as StandardScaler, FunctionTransformer, etc.
+
 
     assert y_pred.shape == (x_test.shape[0],)
     y_pred = pd.DataFrame({"y": y_pred}, index=x_test.index)
