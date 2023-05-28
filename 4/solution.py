@@ -12,11 +12,13 @@ from sklearn.model_selection import train_test_split
 from sklearn.base import BaseEstimator, TransformerMixin
 
 INPUT_SIZE = 1000
-HIDDEN_LAYERS_SIZES = [400, 128, 16]
+HIDDEN_LAYERS_SIZES = [400, 128, 50, 16]
 OUTPUT_SIZE = 1
 NUMBER_OF_EPOCHS = 5
-LEARNING_RATE = 0.001
+LEARNING_RATE = 0.0005
 BATCH_SIZE = 256
+
+VALIDATION = False
 
 def load_data():
     """
@@ -46,9 +48,6 @@ class Net(nn.Module):
         The constructor of the model.
         """
         super().__init__()
-        # TODO: Define the architecture of the model. It should be able to be trained on pretraing data 
-        # and then used to extract features from the training and test data.
-
         layers = []
 
         # Input layer
@@ -76,9 +75,6 @@ class Net(nn.Module):
         output: x: torch.Tensor, the output of the model
         """
 
-        # TODO: Implement the forward pass of the model, in accordance with the architecture 
-        # defined in the constructor.
-
         x = self.model_whole(x)
         return x
 
@@ -86,7 +82,7 @@ class Net(nn.Module):
         x = self.model_cut(x)
         return x
     
-def make_feature_extractor(x, y, batch_size=BATCH_SIZE, eval_size=10000):
+def make_feature_extractor(x, y, batch_size=BATCH_SIZE, validation=False, eval_size=10000):
     """
     This function trains the feature extractor on the pretraining data and returns a function which
     can be used to extract features from the training and test data.
@@ -100,18 +96,20 @@ def make_feature_extractor(x, y, batch_size=BATCH_SIZE, eval_size=10000):
     """
     # Pretraining data loading
     in_features = x.shape[-1]
-    x_tr, x_val, y_tr, y_val = train_test_split(x, y, test_size=eval_size, random_state=0, shuffle=True)
-    x_tr, x_val = torch.tensor(x_tr, dtype=torch.float), torch.tensor(x_val, dtype=torch.float)
-    y_tr, y_val = torch.tensor(y_tr, dtype=torch.float), torch.tensor(y_val, dtype=torch.float)
+
+    if validation:
+        x_tr, x_val, y_tr, y_val = train_test_split(x, y, test_size=eval_size, random_state=0, shuffle=True)
+        x_tr, x_val = torch.tensor(x_tr, dtype=torch.float), torch.tensor(x_val, dtype=torch.float)
+        y_tr, y_val = torch.tensor(y_tr, dtype=torch.float), torch.tensor(y_val, dtype=torch.float)
+    else:
+        x_tr, y_tr = torch.tensor(x, dtype=torch.float), torch.tensor(y, dtype=torch.float)
 
     # model declaration
     model = Net(input_size=INPUT_SIZE, hidden_layers_sizes=HIDDEN_LAYERS_SIZES, output_size=OUTPUT_SIZE)
 
-    # TODO: Implement the training loop. The model should be trained on the pretraining data. Use validation set 
-    # to monitor the loss.
-
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(params=model.parameters(), lr=LEARNING_RATE)
+    #optimizer = torch.optim.SGD(params=model.parameters(), lr=LEARNING_RATE)
 
     for epoch in range(NUMBER_OF_EPOCHS):
 
@@ -120,7 +118,7 @@ def make_feature_extractor(x, y, batch_size=BATCH_SIZE, eval_size=10000):
         train_loss = 0.0
         for i in range(0, len(x_tr), batch_size):
             X = x_tr[i : i+batch_size,]
-            y = y_tr[i : i+batch_size]
+            y = y_tr[i : i+batch_size].unsqueeze(1)
             optimizer.zero_grad()
             outputs = model(X)
             loss = criterion(outputs, y)
@@ -129,6 +127,10 @@ def make_feature_extractor(x, y, batch_size=BATCH_SIZE, eval_size=10000):
             train_loss += loss.item()
         avg_train_loss = train_loss / (len(x_tr) // batch_size)
 
+        if not validation:
+            print(f"Epoch {epoch + 1}/{NUMBER_OF_EPOCHS}: Train Loss: {avg_train_loss:.4f}")
+            continue
+
         # Validation
         model.eval()
         validation_loss = 0.0
@@ -136,7 +138,7 @@ def make_feature_extractor(x, y, batch_size=BATCH_SIZE, eval_size=10000):
         with torch.no_grad():
             for i in range(0, len(x_val), batch_size):
                 X = x_tr[i: i + batch_size,]
-                y = y_tr[i: i + batch_size]
+                y = y_tr[i: i + batch_size].unsqueeze(1)
                 outputs = model(X)
                 loss = criterion(outputs, y)
                 validation_loss += loss.item()
@@ -203,9 +205,8 @@ def get_regression_model():
 
     output: model: sklearn compatible model, the regression model
     """
-    # TODO: Implement the regression model. It should be able to be trained on the features extracted
-    # by the feature extractor.
-    model = RidgeCV(alphas = (0.01, 1.0, 100)) #default: leave one out cross-validation technique (efficient)
+
+    model = RidgeCV(alphas = np.linspace(0.1, 200, num = 10000)) #default: leave one out cross-validation technique (efficient)
 
     return model
 
@@ -216,15 +217,14 @@ if __name__ == '__main__':
     print("Data loaded!")
     # Utilize pretraining data by creating feature extractor which extracts lumo energy 
     # features from available initial features
-    feature_extractor = make_feature_extractor(x_pretrain, y_pretrain)
+    feature_extractor = make_feature_extractor(x_pretrain, y_pretrain, validation=VALIDATION)
     feature_extractor(x_pretrain)
     PretrainedFeatureClass = make_pretraining_class({"pretrain": feature_extractor})
     
     # regression model
     regression_model = get_regression_model()
     y_pred = np.zeros(x_test.shape[0])
-    # TODO: Implement the pipeline. It should contain feature extraction and regression. You can optionally
-    # use other sklearn tools, such as StandardScaler, FunctionTransformer, etc.
+
     pipeline = Pipeline([('pretrainedfeatureselector', PretrainedFeatureClass(feature_extractor="pretrain")),
                          ('scale', StandardScaler()),
                          ('reg', regression_model)])
