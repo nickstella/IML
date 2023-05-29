@@ -5,17 +5,24 @@ from sklearn.pipeline import Pipeline
 import sklearn.linear_model
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.metrics import mean_squared_error
-from sklearn.linear_model import RidgeCV
+from sklearn.linear_model import RidgeCV, LassoCV, ElasticNetCV
 import torch
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
 from sklearn.base import BaseEstimator, TransformerMixin
+import random
+
+seed = 0
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+
 
 INPUT_SIZE = 1000
-HIDDEN_LAYERS_SIZES = [400, 128, 50, 16]
+HIDDEN_LAYERS_SIZES = [128]
 OUTPUT_SIZE = 1
-NUMBER_OF_EPOCHS = 5
-LEARNING_RATE = 0.0005
+NUMBER_OF_EPOCHS = 20
+LEARNING_RATE = 0.001
 BATCH_SIZE = 256
 
 VALIDATION = False
@@ -52,12 +59,12 @@ class Net(nn.Module):
 
         # Input layer
         layers.append(nn.Linear(input_size, hidden_layers_sizes[0]))
-        layers.append(nn.ReLU())
+        layers.append(nn.Sigmoid())
 
         # Hidden layers
         for i in range(1, len(hidden_layers_sizes)):
             layers.append(nn.Linear(hidden_layers_sizes[i-1], hidden_layers_sizes[i]))
-            layers.append(nn.ReLU())
+            layers.append(nn.Sigmoid())
 
         # Output layer
         layers.append(nn.Linear(hidden_layers_sizes[-1], output_size))
@@ -108,7 +115,7 @@ def make_feature_extractor(x, y, batch_size=BATCH_SIZE, validation=False, eval_s
     model = Net(input_size=INPUT_SIZE, hidden_layers_sizes=HIDDEN_LAYERS_SIZES, output_size=OUTPUT_SIZE)
 
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.Adagrad(params=model.parameters(), lr=LEARNING_RATE)
     #optimizer = torch.optim.SGD(params=model.parameters(), lr=LEARNING_RATE)
 
     for epoch in range(NUMBER_OF_EPOCHS):
@@ -206,7 +213,7 @@ def get_regression_model():
     output: model: sklearn compatible model, the regression model
     """
 
-    model = RidgeCV(alphas = np.linspace(0.1, 200, num = 10000)) #default: leave one out cross-validation technique (efficient)
+    model = RidgeCV(alphas = np.linspace(0.1, 200, num = 10000), cv = 5, scoring = "neg_root_mean_squared_error")
 
     return model
 
@@ -224,16 +231,13 @@ if __name__ == '__main__':
     # regression model
     regression_model = get_regression_model()
     y_pred = np.zeros(x_test.shape[0])
-
     pipeline = Pipeline([('pretrainedfeatureselector', PretrainedFeatureClass(feature_extractor="pretrain")),
                          ('scale', StandardScaler()),
                          ('reg', regression_model)])
     pipeline.fit(x_train, y_train)
-    score = pipeline.score(x_train, y_train)
-    print(f"Score = {score}")
+    yhat = pipeline.predict(x_train)
+    print(f"RMSE = {mean_squared_error(yhat, y_train)}") #print rmse of training set
     y_pred = pipeline.predict(x_test.to_numpy())
-
-
     assert y_pred.shape == (x_test.shape[0],)
     y_pred = pd.DataFrame({"y": y_pred}, index=x_test.index)
     y_pred.to_csv("results.csv", index_label="Id")
