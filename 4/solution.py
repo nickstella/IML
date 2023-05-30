@@ -21,8 +21,8 @@ torch.manual_seed(seed)
 INPUT_SIZE = 1000
 HIDDEN_LAYERS_SIZES = [128]
 OUTPUT_SIZE = 1
-NUMBER_OF_EPOCHS = 20
-LEARNING_RATE = 0.001
+NUMBER_OF_EPOCHS = 40
+LEARNING_RATE = 0.01
 BATCH_SIZE = 256
 
 VALIDATION = False
@@ -213,7 +213,8 @@ def get_regression_model():
     output: model: sklearn compatible model, the regression model
     """
 
-    model = RidgeCV(alphas = np.linspace(0.1, 200, num = 10000), cv = 5, scoring = "neg_root_mean_squared_error")
+    model = RidgeCV(alphas = np.linspace(0.1, 200, num = 10000), cv = 4, scoring = "neg_root_mean_squared_error")
+    #model = LassoCV(alphas = np.linspace(0.1, 200, num = 10000))
 
     return model
 
